@@ -267,10 +267,17 @@ impl I18n {
         }
     }
 
-    pub fn about_body(&self) -> &'static str {
+    pub fn about_body(&self) -> String {
+        let ver = env!("CARGO_PKG_VERSION");
         match self.lang {
-            Language::English => "Caps Notify v0.1.5\n\nUltra-lightweight native lock key indicator for Windows.\nZero polling, low RAM footprint.\n\nAuthor: GallitoMZ\nLicense: MIT",
-            Language::Spanish => "Caps Notify v0.1.5\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nCero polling, mínimo consumo de RAM.\n\nAutor: GallitoMZ\nLicencia: MIT",
+            Language::English => format!(
+                "Caps Notify v{}\n\nUltra-lightweight native lock key indicator for Windows.\nZero polling, low RAM footprint.\n\nAuthor: GallitoMZ\nLicense: MIT",
+                ver
+            ),
+            Language::Spanish => format!(
+                "Caps Notify v{}\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nCero polling, mínimo consumo de RAM.\n\nAutor: GallitoMZ\nLicencia: MIT",
+                ver
+            ),
         }
     }
 }
