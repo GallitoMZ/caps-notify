@@ -18,9 +18,9 @@ use state::STATE;
 use tray::{
     Tray, ID_POS_BOTTOM_CENTER, ID_POS_BOTTOM_LEFT, ID_POS_BOTTOM_RIGHT, ID_POS_CENTER,
     ID_POS_CENTER_LEFT, ID_POS_CENTER_RIGHT, ID_POS_TOP_CENTER, ID_POS_TOP_LEFT,
-    ID_POS_TOP_RIGHT, ID_SND_CLICK, ID_SND_MODERN, ID_SND_WIN, ID_THM_LENOVO, ID_THM_MODERN,
-    ID_TRAY_ABOUT, ID_TRAY_AUTOSTART, ID_TRAY_CONFIG, ID_TRAY_EXIT, ID_TRAY_OVERLAY,
-    ID_TRAY_SETTINGS, ID_TRAY_SOUND, ID_TRAY_TOASTS, WM_APP_TRAY,
+    ID_POS_TOP_RIGHT, ID_SND_CLICK, ID_SND_MODERN, ID_SND_WIN, ID_THM_CYBER, ID_THM_DYNAMIC,
+    ID_THM_MODERN, ID_THM_NEUMORPHIC, ID_TRAY_ABOUT, ID_TRAY_AUTOSTART, ID_TRAY_CONFIG,
+    ID_TRAY_EXIT, ID_TRAY_OVERLAY, ID_TRAY_SETTINGS, ID_TRAY_SOUND, ID_TRAY_TOASTS, WM_APP_TRAY,
 };
 
 use std::cell::RefCell;
@@ -291,7 +291,9 @@ unsafe extern "system" fn wndproc(
                 }
                 // Themes
                 ID_THM_MODERN => set_theme_and_preview("CapsNotifyModern"),
-                ID_THM_LENOVO => set_theme_and_preview("LenovoClassic"),
+                ID_THM_CYBER => set_theme_and_preview("CyberMinimal"),
+                ID_THM_NEUMORPHIC => set_theme_and_preview("NeumorphicKey"),
+                ID_THM_DYNAMIC => set_theme_and_preview("DynamicIsland"),
 
                 // Positions
                 ID_POS_TOP_CENTER => set_position_and_preview("TopCenter"),

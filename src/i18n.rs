@@ -269,8 +269,8 @@ impl I18n {
 
     pub fn about_body(&self) -> &'static str {
         match self.lang {
-            Language::English => "Caps Notify v0.1.1\n\nUltra-lightweight native lock key indicator for Windows.\nZero polling, low RAM footprint.\n\nAuthor: GallitoMZ\nLicense: MIT",
-            Language::Spanish => "Caps Notify v0.1.1\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nCero polling, mínimo consumo de RAM.\n\nAutor: GallitoMZ\nLicencia: MIT",
+            Language::English => "Caps Notify v0.1.3\n\nUltra-lightweight native lock key indicator for Windows.\nZero polling, low RAM footprint.\n\nAuthor: GallitoMZ\nLicense: MIT",
+            Language::Spanish => "Caps Notify v0.1.3\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nCero polling, mínimo consumo de RAM.\n\nAutor: GallitoMZ\nLicencia: MIT",
         }
     }
 }

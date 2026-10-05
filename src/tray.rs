@@ -43,7 +43,9 @@ pub const ID_SND_CLICK: usize = 2021;
 pub const ID_SND_WIN: usize = 2022;
 
 pub const ID_THM_MODERN: usize = 2030;
-pub const ID_THM_LENOVO: usize = 2031;
+pub const ID_THM_CYBER: usize = 2031;
+pub const ID_THM_NEUMORPHIC: usize = 2032;
+pub const ID_THM_DYNAMIC: usize = 2033;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IconKey {
@@ -226,7 +228,7 @@ impl Tray {
             };
 
             if let Ok(menu) = CreatePopupMenu() {
-                let _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_TRAY_TITLE, w!("Caps Notify v0.1.1"));
+                let _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_TRAY_TITLE, w!("Caps Notify v0.1.3"));
                 let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
 
                 let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, PCWSTR(to_w(i18n.tray_settings()).as_ptr()));
@@ -235,10 +237,15 @@ impl Tray {
                 // Theme Submenu
                 if let Ok(thm_menu) = CreatePopupMenu() {
                     let chk_thm = |t: &str| if cfg.overlay_theme == t { MF_CHECKED } else { MF_UNCHECKED };
-                    let lbl_m = if i18n.lang == Language::Spanish { "Caps Notify Moderno (Default)" } else { "Caps Notify Modern (Default)" };
-                    let lbl_l = if i18n.lang == Language::Spanish { "Lenovo Cl\u{00e1}sico (OSD)" } else { "Lenovo Classic (OSD)" };
+                    let (lbl_m, lbl_c, lbl_n, lbl_d) = if i18n.lang == Language::Spanish {
+                        ("Modern Glass (Default)", "Cyber Minimal", "Tecla Neum\u{00f3}rfica", "Dynamic Island")
+                    } else {
+                        ("Modern Glass (Default)", "Cyber Minimal", "Neumorphic Keycap", "Dynamic Island")
+                    };
                     let _ = AppendMenuW(thm_menu, MF_STRING | chk_thm("CapsNotifyModern"), ID_THM_MODERN, PCWSTR(to_w(lbl_m).as_ptr()));
-                    let _ = AppendMenuW(thm_menu, MF_STRING | chk_thm("LenovoClassic"), ID_THM_LENOVO, PCWSTR(to_w(lbl_l).as_ptr()));
+                    let _ = AppendMenuW(thm_menu, MF_STRING | chk_thm("CyberMinimal"), ID_THM_CYBER, PCWSTR(to_w(lbl_c).as_ptr()));
+                    let _ = AppendMenuW(thm_menu, MF_STRING | chk_thm("NeumorphicKey"), ID_THM_NEUMORPHIC, PCWSTR(to_w(lbl_n).as_ptr()));
+                    let _ = AppendMenuW(thm_menu, MF_STRING | chk_thm("DynamicIsland"), ID_THM_DYNAMIC, PCWSTR(to_w(lbl_d).as_ptr()));
                     let _ = AppendMenuW(menu, MF_POPUP, thm_menu.0 as usize, PCWSTR(to_w(i18n.tray_theme()).as_ptr()));
                 }
 

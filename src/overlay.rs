@@ -27,17 +27,15 @@ struct HudDisplayState {
     key_type: String, // "Caps", "Num", "Scroll"
     enabled: bool,
     theme: String,
-    size_str: String,
 }
 
 static HUD_STATE: Mutex<HudDisplayState> = Mutex::new(HudDisplayState {
     key_type: String::new(),
     enabled: false,
     theme: String::new(),
-    size_str: String::new(),
 });
 
-/// Displays the floating HUD overlay indicator with true per-pixel alpha DWM rendering
+/// Displays the floating HUD overlay indicator
 pub fn show(key_name: &str, enabled: bool, cfg: &Config) {
     let key_type = if key_name.contains("Caps") {
         "Caps"
@@ -52,7 +50,6 @@ pub fn show(key_name: &str, enabled: bool, cfg: &Config) {
             st.key_type = key_type.to_string();
             st.enabled = enabled;
             st.theme = cfg.overlay_theme.clone();
-            st.size_str = cfg.overlay_size.clone();
         }
     }
 
@@ -61,10 +58,10 @@ pub fn show(key_name: &str, enabled: bool, cfg: &Config) {
         return;
     }
 
-    let size_dim = match cfg.overlay_size.as_str() {
-        "Small" => 108,
-        "Large" => 156,
-        _ => 130, // Default: Medium
+    let (win_w, win_h) = match cfg.overlay_theme.as_str() {
+        "CyberMinimal" => (168, 64),
+        "DynamicIsland" => (156, 68),
+        _ => (130, 130), // Default & Neumorphic
     };
 
     let (screen_w, screen_h) = unsafe {
@@ -80,22 +77,21 @@ pub fn show(key_name: &str, enabled: bool, cfg: &Config) {
 
     let (x, y) = match cfg.overlay_position.as_str() {
         "TopLeft" => (margin_x, margin_y),
-        "TopRight" => (screen_w - size_dim - margin_x, margin_y),
-        "CenterLeft" => (margin_x, (screen_h - size_dim) / 2),
-        "Center" => ((screen_w - size_dim) / 2, (screen_h - size_dim) / 2),
-        "CenterRight" => (screen_w - size_dim - margin_x, (screen_h - size_dim) / 2),
-        "BottomLeft" => (margin_x, screen_h - size_dim - margin_bottom),
-        "BottomCenter" => ((screen_w - size_dim) / 2, screen_h - size_dim - margin_bottom),
-        "BottomRight" => (screen_w - size_dim - margin_x, screen_h - size_dim - margin_bottom),
-        _ => ((screen_w - size_dim) / 2, margin_y), // Default: TopCenter
+        "TopRight" => (screen_w - win_w - margin_x, margin_y),
+        "CenterLeft" => (margin_x, (screen_h - win_h) / 2),
+        "Center" => ((screen_w - win_w) / 2, (screen_h - win_h) / 2),
+        "CenterRight" => (screen_w - win_w - margin_x, (screen_h - win_h) / 2),
+        "BottomLeft" => (margin_x, screen_h - win_h - margin_bottom),
+        "BottomCenter" => ((screen_w - win_w) / 2, screen_h - win_h - margin_bottom),
+        "BottomRight" => (screen_w - win_w - margin_x, screen_h - win_h - margin_bottom),
+        _ => ((screen_w - win_w) / 2, margin_y), // Default: TopCenter
     };
 
-    // Render selected theme
-    if cfg.overlay_theme == "LenovoClassic" {
-        render_lenovo_classic(hwnd, x, y, size_dim, key_type, enabled);
-    } else {
-        // Default: CapsNotifyModern (Unique, high-tech glass card)
-        render_caps_notify_modern(hwnd, x, y, size_dim, key_type, enabled);
+    match cfg.overlay_theme.as_str() {
+        "CyberMinimal" => render_cyber_minimal(hwnd, x, y, win_w, win_h, key_type, enabled),
+        "NeumorphicKey" => render_neumorphic_key(hwnd, x, y, win_w, win_h, key_type, enabled),
+        "DynamicIsland" => render_dynamic_island(hwnd, x, y, win_w, win_h, key_type, enabled),
+        _ => render_caps_notify_modern(hwnd, x, y, win_w, win_h, key_type, enabled),
     }
 
     unsafe {
@@ -129,7 +125,7 @@ fn get_or_create_overlay() -> HWND {
             WS_POPUP,
             0,
             0,
-            130,
+            168,
             130,
             None,
             None,
@@ -177,18 +173,19 @@ unsafe extern "system" fn overlay_wndproc(
 }
 
 // =========================================================================
-// DESIGN 1: CapsNotifyModern — Unique, elegant high-tech HUD (DEFAULT)
+// THEME 1: CapsNotifyModern — Refined, elegant glass card (DEFAULT)
 // =========================================================================
 fn render_caps_notify_modern(
     hwnd: HWND,
     x: i32,
     y: i32,
-    size: i32,
+    w_px: i32,
+    h_px: i32,
     key_type: &str,
     enabled: bool,
 ) {
-    let w = size as usize;
-    let h = size as usize;
+    let w = w_px as usize;
+    let h = h_px as usize;
 
     unsafe {
         let hdc_screen = windows::Win32::Graphics::Gdi::GetDC(None);
@@ -197,227 +194,8 @@ fn render_caps_notify_modern(
         let bmi = BITMAPINFO {
             bmiHeader: BITMAPINFOHEADER {
                 biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: size,
-                biHeight: -size,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB.0,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let mut p_bits: *mut core::ffi::c_void = std::ptr::null_mut();
-        let hbmp = CreateDIBSection(
-            hdc_mem,
-            &bmi,
-            DIB_RGB_COLORS,
-            &mut p_bits,
-            None,
-            0,
-        ).unwrap_or_default();
-
-        if hbmp.0.is_null() || p_bits.is_null() {
-            let _ = DeleteDC(hdc_mem);
-            windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
-            return;
-        }
-
-        let old_bmp = SelectObject(hdc_mem, hbmp);
-        let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
-
-        // 1. Dark Glass Card Background (Obsidian #0E121A, 93% opacity)
-        let bg_radius = (size as f32) * 0.17;
-        let bg_alpha = 236.0f32;
-
-        for py in 0..h {
-            for px in 0..w {
-                let fx = px as f32;
-                let fy = py as f32;
-
-                let dx = if fx < bg_radius {
-                    bg_radius - fx
-                } else if fx > (size as f32) - 1.0 - bg_radius {
-                    fx - ((size as f32) - 1.0 - bg_radius)
-                } else {
-                    0.0
-                };
-
-                let dy = if fy < bg_radius {
-                    bg_radius - fy
-                } else if fy > (size as f32) - 1.0 - bg_radius {
-                    fy - ((size as f32) - 1.0 - bg_radius)
-                } else {
-                    0.0
-                };
-
-                let dist = (dx * dx + dy * dy).sqrt();
-                let alpha_factor = if dist <= bg_radius - 1.0 {
-                    1.0
-                } else if dist < bg_radius + 0.5 {
-                    (bg_radius + 0.5 - dist).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-
-                if alpha_factor > 0.0 {
-                    let a = (bg_alpha * alpha_factor) as u8;
-                    // Obsidian Slate #0E121A
-                    let r = ((14.0 * (a as f32 / 255.0)) as u8).min(255);
-                    let g = ((18.0 * (a as f32 / 255.0)) as u8).min(255);
-                    let b = ((26.0 * (a as f32 / 255.0)) as u8).min(255);
-
-                    let idx = (py * w + px) * 4;
-                    pixels[idx] = b;
-                    pixels[idx + 1] = g;
-                    pixels[idx + 2] = r;
-                    pixels[idx + 3] = a;
-                }
-            }
-        }
-
-        // 2. Luminous Accent Border
-        let (border_r, border_g, border_b) = if enabled {
-            (0u8, 245u8, 155u8) // Cyber Emerald
-        } else {
-            (71u8, 85u8, 105u8) // Slate 600
-        };
-        draw_round_rect_stroke(pixels, w, h, 2.0, 2.0, (size as f32) - 2.0, (size as f32) - 2.0, bg_radius - 1.0, 1.8, border_r, border_g, border_b);
-
-        // 3. Top Illuminated Icon Badge
-        let badge_y = (size as f32) * 0.22;
-        let center_x = (size as f32) * 0.5;
-
-        match key_type {
-            "Caps" => {
-                // Modern illuminated arrow chevron
-                let chev_w = (size as f32) * 0.11;
-                let chev_h = (size as f32) * 0.08;
-                let (cr, cg, cb) = if enabled { (0u8, 245u8, 155u8) } else { (148u8, 163u8, 184u8) };
-                draw_line(pixels, w, h, center_x - chev_w, badge_y + chev_h, center_x, badge_y, 3.8, cr, cg, cb);
-                draw_line(pixels, w, h, center_x, badge_y, center_x + chev_w, badge_y + chev_h, 3.8, cr, cg, cb);
-            }
-            "Num" => {
-                let (cr, cg, cb) = if enabled { (0u8, 245u8, 155u8) } else { (148u8, 163u8, 184u8) };
-                draw_solid_circle(pixels, w, h, center_x, badge_y + 4.0, (size as f32) * 0.045, cr, cg, cb);
-            }
-            _ => {
-                let (cr, cg, cb) = if enabled { (0u8, 245u8, 155u8) } else { (148u8, 163u8, 184u8) };
-                let sc_len = (size as f32) * 0.05;
-                draw_line(pixels, w, h, center_x, badge_y - sc_len + 4.0, center_x, badge_y + sc_len + 4.0, 3.2, cr, cg, cb);
-            }
-        }
-
-        // 4. Center Key Name Title ("CAPS", "NUM", "SCROLL")
-        let title_text = match key_type {
-            "Caps" => "CAPS",
-            "Num" => "NUM",
-            _ => "SCROLL",
-        };
-        let font_title = CreateFontW(
-            ((size as f32) * 0.20) as i32,
-            0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
-        );
-        let old_font = SelectObject(hdc_mem, font_title);
-        let _ = SetBkMode(hdc_mem, TRANSPARENT);
-        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
-
-        let mut rect_title = RECT {
-            left: 8,
-            top: ((size as f32) * 0.38) as i32,
-            right: size - 8,
-            bottom: ((size as f32) * 0.65) as i32,
-        };
-        let wide_title: Vec<u16> = title_text.encode_utf16().collect();
-        DrawTextW(hdc_mem, &mut wide_title.clone(), &mut rect_title, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(hdc_mem, old_font);
-        let _ = DeleteObject(font_title);
-
-        // 5. Bottom Status Pill Badge ("[ ● ON ]" / "[ ○ OFF ]")
-        let pill_w = (size as f32) * 0.56;
-        let pill_h = (size as f32) * 0.20;
-        let pill_x = ((size as f32) - pill_w) / 2.0;
-        let pill_y = (size as f32) * 0.69;
-        let pill_rad = pill_h / 2.0;
-
-        let (pill_r, pill_g, pill_b) = if enabled {
-            (0u8, 245u8, 155u8) // Emerald
-        } else {
-            (100u8, 116u8, 139u8) // Slate 500
-        };
-
-        // Fill pill
-        draw_solid_round_rect(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, pill_r, pill_g, pill_b, if enabled { 45 } else { 30 });
-        draw_round_rect_stroke(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 1.4, pill_r, pill_g, pill_b);
-
-        // Status text inside pill
-        let status_str = if enabled { "● ON" } else { "○ OFF" };
-        let font_sub = CreateFontW(
-            ((size as f32) * 0.125) as i32,
-            0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
-        );
-        let old_font2 = SelectObject(hdc_mem, font_sub);
-        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
-
-        let mut rect_pill = RECT {
-            left: pill_x as i32,
-            top: pill_y as i32,
-            right: (pill_x + pill_w) as i32,
-            bottom: (pill_y + pill_h) as i32,
-        };
-        let wide_sub: Vec<u16> = status_str.encode_utf16().collect();
-        DrawTextW(hdc_mem, &mut wide_sub.clone(), &mut rect_pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(hdc_mem, old_font2);
-        let _ = DeleteObject(font_sub);
-
-        // Make GDI text fully opaque in text areas
-        fix_gdi_text_alpha(pixels, w, h, 0, size as usize, 0, size as usize);
-
-        // UpdateLayeredWindow
-        let pt_dst = POINT { x, y };
-        let pt_src = POINT { x: 0, y: 0 };
-        let sz = SIZE { cx: size, cy: size };
-        let blend = BLENDFUNCTION {
-            BlendOp: AC_SRC_OVER as u8,
-            BlendFlags: 0,
-            SourceConstantAlpha: 255,
-            AlphaFormat: AC_SRC_ALPHA as u8,
-        };
-
-        let _ = UpdateLayeredWindow(
-            hwnd, None, Some(&pt_dst), Some(&sz), hdc_mem, Some(&pt_src), COLORREF(0), Some(&blend), ULW_ALPHA,
-        );
-
-        SelectObject(hdc_mem, old_bmp);
-        let _ = DeleteObject(hbmp);
-        let _ = DeleteDC(hdc_mem);
-        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
-    }
-}
-
-// =========================================================================
-// DESIGN 2: LenovoClassic — Exact pixel-accurate reproduction of Lenovo OSD
-// =========================================================================
-fn render_lenovo_classic(
-    hwnd: HWND,
-    x: i32,
-    y: i32,
-    size: i32,
-    key_type: &str,
-    enabled: bool,
-) {
-    let w = size as usize;
-    let h = size as usize;
-
-    unsafe {
-        let hdc_screen = windows::Win32::Graphics::Gdi::GetDC(None);
-        let hdc_mem = CreateCompatibleDC(hdc_screen);
-
-        let bmi = BITMAPINFO {
-            bmiHeader: BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: size,
-                biHeight: -size,
+                biWidth: w_px,
+                biHeight: -h_px,
                 biPlanes: 1,
                 biBitCount: 32,
                 biCompression: BI_RGB.0,
@@ -440,180 +218,472 @@ fn render_lenovo_classic(
         let old_bmp = SelectObject(hdc_mem, hbmp);
         let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
 
-        // 1. Dark Rounded Background (#131315 at 87% opacity, 222 alpha)
-        let bg_radius = (size as f32) * 0.15;
-        let bg_alpha = 222.0f32;
+        // 1. Dark Opaque Background (alpha = 252 so nothing underneath bleeds through!)
+        let bg_radius = (h_px as f32) * 0.17;
+        let bg_alpha = 252.0f32;
 
-        for py in 0..h {
-            for px in 0..w {
-                let fx = px as f32;
-                let fy = py as f32;
+        draw_base_rounded_background(pixels, w, h, bg_radius, bg_alpha, 14, 17, 24);
 
-                let dx = if fx < bg_radius {
-                    bg_radius - fx
-                } else if fx > (size as f32) - 1.0 - bg_radius {
-                    fx - ((size as f32) - 1.0 - bg_radius)
-                } else {
-                    0.0
-                };
+        // 2. Subtle, elegant accent border (No harsh neon, soft teal/cyan in ON, slate in OFF)
+        let (border_r, border_g, border_b) = if enabled {
+            (45u8, 212u8, 191u8) // Soft Teal/Cyan #2DD4BF
+        } else {
+            (51u8, 65u8, 85u8) // Slate 700
+        };
+        draw_round_rect_stroke(pixels, w, h, 1.5, 1.5, (w_px as f32) - 1.5, (h_px as f32) - 1.5, bg_radius - 1.0, 1.4, border_r, border_g, border_b);
 
-                let dy = if fy < bg_radius {
-                    bg_radius - fy
-                } else if fy > (size as f32) - 1.0 - bg_radius {
-                    fy - ((size as f32) - 1.0 - bg_radius)
-                } else {
-                    0.0
-                };
+        // 3. Top Indicator Glyph
+        let badge_y = (h_px as f32) * 0.20;
+        let center_x = (w_px as f32) * 0.5;
 
-                let dist = (dx * dx + dy * dy).sqrt();
-                let alpha_factor = if dist <= bg_radius - 1.0 {
-                    1.0
-                } else if dist < bg_radius + 0.5 {
-                    (bg_radius + 0.5 - dist).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-
-                if alpha_factor > 0.0 {
-                    let a = (bg_alpha * alpha_factor) as u8;
-                    // Pure charcoal #131315
-                    let r = ((19.0 * (a as f32 / 255.0)) as u8).min(255);
-                    let g = ((19.0 * (a as f32 / 255.0)) as u8).min(255);
-                    let b = ((21.0 * (a as f32 / 255.0)) as u8).min(255);
-
-                    let idx = (py * w + px) * 4;
-                    pixels[idx] = b;
-                    pixels[idx + 1] = g;
-                    pixels[idx + 2] = r;
-                    pixels[idx + 3] = a;
-                }
-            }
-        }
-
-        // Subtle 1px outer border
-        draw_round_rect_stroke(pixels, w, h, 1.0, 1.0, (size as f32) - 1.0, (size as f32) - 1.0, bg_radius, 1.0, 48, 50, 56);
-
-        // 2. Pure White Keycap Frame (#FFFFFF)
-        // Margin ~17%, Corner radius 16px, thickness 5.5px
-        let k_margin = (size as f32) * 0.17;
-        let k_left = k_margin;
-        let k_top = k_margin;
-        let k_right = (size as f32) - k_margin;
-        let k_bottom = (size as f32) - k_margin;
-        let k_radius = (size as f32) * 0.14;
-        let stroke_w = ((size as f32) * 0.046).max(5.0);
-
-        draw_round_rect_stroke(pixels, w, h, k_left, k_top, k_right, k_bottom, k_radius, stroke_w, 255, 255, 255);
-
-        // 3. Small Keycap Dish Arc nestled strictly inside bottom-right corner (never sticks out!)
-        let dish_cx = k_right - (size as f32) * 0.12;
-        let dish_cy = k_bottom - (size as f32) * 0.12;
-        let dish_r = (size as f32) * 0.10;
-        draw_arc(pixels, w, h, dish_cx, dish_cy, dish_r, 0.0, 90.0, stroke_w * 0.75, 255, 255, 255);
-
-        // 4. Top-left Glyph
         match key_type {
             "Caps" => {
-                // Clean Chevron ^
-                let apex_x = k_left + (size as f32) * 0.12;
-                let apex_y = k_top + (size as f32) * 0.09;
-                let leg_w = (size as f32) * 0.06;
-                let leg_h = (size as f32) * 0.06;
-                draw_line(pixels, w, h, apex_x - leg_w, apex_y + leg_h, apex_x, apex_y, stroke_w * 0.85, 255, 255, 255);
-                draw_line(pixels, w, h, apex_x, apex_y, apex_x + leg_w, apex_y + leg_h, stroke_w * 0.85, 255, 255, 255);
+                let chev_w = (w_px as f32) * 0.09;
+                let chev_h = (h_px as f32) * 0.07;
+                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
+                draw_line(pixels, w, h, center_x - chev_w, badge_y + chev_h, center_x, badge_y, 3.2, cr, cg, cb);
+                draw_line(pixels, w, h, center_x, badge_y, center_x + chev_w, badge_y + chev_h, 3.2, cr, cg, cb);
             }
             "Num" => {
-                // Solid dot LED
-                let dot_x = k_left + (size as f32) * 0.12;
-                let dot_y = k_top + (size as f32) * 0.12;
-                let dot_r = (size as f32) * 0.042;
-                draw_solid_circle(pixels, w, h, dot_x, dot_y, dot_r, 255, 255, 255);
+                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
+                draw_solid_circle(pixels, w, h, center_x, badge_y + 3.0, (w_px as f32) * 0.040, cr, cg, cb);
             }
             _ => {
-                // Scroll arrow
-                let sc_x = k_left + (size as f32) * 0.12;
-                let sc_y = k_top + (size as f32) * 0.12;
-                let sc_l = (size as f32) * 0.05;
-                draw_line(pixels, w, h, sc_x, sc_y - sc_l, sc_x, sc_y + sc_l, stroke_w * 0.7, 255, 255, 255);
+                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
+                let sc_len = (h_px as f32) * 0.045;
+                draw_line(pixels, w, h, center_x, badge_y - sc_len + 3.0, center_x, badge_y + sc_len + 3.0, 2.8, cr, cg, cb);
             }
         }
 
-        // 5. Center Text (ABC / abc / 123)
-        let (text, font_size, is_bold) = match key_type {
+        // 4. Center Text: "ABC" (ON) / "abc" (OFF) for Caps; "123" for Num; "SCR" for Scroll
+        let (center_text, font_size) = match key_type {
             "Caps" => {
                 if enabled {
-                    ("ABC", ((size as f32) * 0.24) as i32, true)
+                    ("ABC", ((h_px as f32) * 0.23) as i32)
                 } else {
-                    ("abc", ((size as f32) * 0.23) as i32, false)
+                    ("abc", ((h_px as f32) * 0.22) as i32)
                 }
             }
-            "Num" => ("123", ((size as f32) * 0.23) as i32, true),
+            "Num" => ("123", ((h_px as f32) * 0.23) as i32),
             _ => {
                 if enabled {
-                    ("SCR", ((size as f32) * 0.19) as i32, true)
+                    ("SCR", ((h_px as f32) * 0.20) as i32)
                 } else {
-                    ("scr", ((size as f32) * 0.19) as i32, false)
+                    ("scr", ((h_px as f32) * 0.20) as i32)
                 }
             }
         };
 
-        let weight = if is_bold { FW_BOLD.0 as i32 } else { FW_SEMIBOLD.0 as i32 };
-        let font_center = CreateFontW(
-            font_size, 0, 0, 0, weight, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
+        let font_title = CreateFontW(
+            font_size, 0, 0, 0, if enabled { FW_BOLD.0 as i32 } else { FW_SEMIBOLD.0 as i32 },
+            0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
         );
-        let old_font = SelectObject(hdc_mem, font_center);
+        let old_font = SelectObject(hdc_mem, font_title);
         let _ = SetBkMode(hdc_mem, TRANSPARENT);
         SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
 
-        let y_adjust = ((size as f32) * 0.02) as i32;
-        let mut rect_center = RECT {
-            left: (k_left as i32) + 2,
-            top: (k_top as i32) + y_adjust,
-            right: (k_right as i32) - 2,
-            bottom: (k_bottom as i32) + y_adjust,
+        let mut rect_title = RECT {
+            left: 6,
+            top: ((h_px as f32) * 0.35) as i32,
+            right: w_px - 6,
+            bottom: ((h_px as f32) * 0.65) as i32,
         };
-        let wide_str: Vec<u16> = text.encode_utf16().collect();
-        DrawTextW(hdc_mem, &mut wide_str.clone(), &mut rect_center, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        let wide_title: Vec<u16> = center_text.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide_title.clone(), &mut rect_title, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
         SelectObject(hdc_mem, old_font);
-        let _ = DeleteObject(font_center);
+        let _ = DeleteObject(font_title);
 
-        // 6. Diagonal Slash if OFF for Num Lock or Scroll Lock
+        // Diagonal slash through 123 if Num Lock is OFF (or Scroll Lock OFF)
         if !enabled && (key_type == "Num" || key_type == "Scroll") {
-            let slash_x1 = k_left - (size as f32) * 0.04;
-            let slash_y1 = k_top - (size as f32) * 0.04;
-            let slash_x2 = k_right + (size as f32) * 0.04;
-            let slash_y2 = k_bottom + (size as f32) * 0.04;
-            draw_line(pixels, w, h, slash_x1, slash_y1, slash_x2, slash_y2, stroke_w * 1.1, 255, 255, 255);
+            let slash_x1 = (w_px as f32) * 0.22;
+            let slash_y1 = (h_px as f32) * 0.60;
+            let slash_x2 = (w_px as f32) * 0.78;
+            let slash_y2 = (h_px as f32) * 0.40;
+            draw_line(pixels, w, h, slash_x1, slash_y1, slash_x2, slash_y2, 3.4, 226, 75, 75); // Soft muted coral slash
         }
 
-        // Fix GDI text alpha
-        fix_gdi_text_alpha(pixels, w, h, 0, size as usize, 0, size as usize);
+        // 5. Bottom Status Pill Badge ("[ ● ON ]" / "[ ○ OFF ]")
+        let pill_w = (w_px as f32) * 0.54;
+        let pill_h = (h_px as f32) * 0.19;
+        let pill_x = ((w_px as f32) - pill_w) / 2.0;
+        let pill_y = (h_px as f32) * 0.70;
+        let pill_rad = pill_h / 2.0;
 
-        // UpdateLayeredWindow
-        let pt_dst = POINT { x, y };
-        let pt_src = POINT { x: 0, y: 0 };
-        let sz = SIZE { cx: size, cy: size };
-        let blend = BLENDFUNCTION {
-            BlendOp: AC_SRC_OVER as u8,
-            BlendFlags: 0,
-            SourceConstantAlpha: 255,
-            AlphaFormat: AC_SRC_ALPHA as u8,
+        let (pill_r, pill_g, pill_b) = if enabled {
+            (45u8, 212u8, 191u8) // Soft Teal
+        } else {
+            (100u8, 116u8, 139u8) // Slate 500
         };
 
-        let _ = UpdateLayeredWindow(
-            hwnd, None, Some(&pt_dst), Some(&sz), hdc_mem, Some(&pt_src), COLORREF(0), Some(&blend), ULW_ALPHA,
-        );
+        draw_solid_round_rect(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, pill_r, pill_g, pill_b, if enabled { 36 } else { 24 });
+        draw_round_rect_stroke(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 1.2, pill_r, pill_g, pill_b);
 
-        SelectObject(hdc_mem, old_bmp);
-        let _ = DeleteObject(hbmp);
-        let _ = DeleteDC(hdc_mem);
-        windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
+        let status_str = if enabled { "● ON" } else { "○ OFF" };
+        let font_sub = CreateFontW(
+            ((h_px as f32) * 0.12) as i32, 0, 0, 0, FW_BOLD.0 as i32,
+            0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
+        );
+        let old_font2 = SelectObject(hdc_mem, font_sub);
+        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+
+        let mut rect_pill = RECT {
+            left: pill_x as i32,
+            top: pill_y as i32,
+            right: (pill_x + pill_w) as i32,
+            bottom: (pill_y + pill_h) as i32,
+        };
+        let wide_sub: Vec<u16> = status_str.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide_sub.clone(), &mut rect_pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_font2);
+        let _ = DeleteObject(font_sub);
+
+        fix_gdi_text_alpha(pixels, w, h);
+
+        commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
     }
 }
 
 // =========================================================================
-// Drawing helpers with anti-aliasing
+// THEME 2: CyberMinimal — Sleek compact tech pill
 // =========================================================================
+fn render_cyber_minimal(
+    hwnd: HWND,
+    x: i32,
+    y: i32,
+    w_px: i32,
+    h_px: i32,
+    key_type: &str,
+    enabled: bool,
+) {
+    let w = w_px as usize;
+    let h = h_px as usize;
+
+    unsafe {
+        let hdc_screen = windows::Win32::Graphics::Gdi::GetDC(None);
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w_px,
+                biHeight: -h_px,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut p_bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let hbmp = CreateDIBSection(hdc_mem, &bmi, DIB_RGB_COLORS, &mut p_bits, None, 0).unwrap_or_default();
+        if hbmp.0.is_null() || p_bits.is_null() {
+            let _ = DeleteDC(hdc_mem);
+            windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
+            return;
+        }
+        let old_bmp = SelectObject(hdc_mem, hbmp);
+        let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
+
+        // Background: Compact capsule (radius 18px)
+        let rad = (h_px as f32) * 0.28;
+        draw_base_rounded_background(pixels, w, h, rad, 252.0, 10, 12, 16);
+
+        let (border_r, border_g, border_b) = if enabled { (56u8, 189u8, 248u8) } else { (51u8, 65u8, 85u8) };
+        draw_round_rect_stroke(pixels, w, h, 1.5, 1.5, (w_px as f32) - 1.5, (h_px as f32) - 1.5, rad - 1.0, 1.4, border_r, border_g, border_b);
+
+        // Left Icon
+        let icon_x = 24.0f32;
+        let icon_y = (h_px as f32) * 0.5;
+        match key_type {
+            "Caps" => {
+                draw_line(pixels, w, h, icon_x - 7.0, icon_y + 4.0, icon_x, icon_y - 4.0, 2.8, border_r, border_g, border_b);
+                draw_line(pixels, w, h, icon_x, icon_y - 4.0, icon_x + 7.0, icon_y + 4.0, 2.8, border_r, border_g, border_b);
+            }
+            "Num" => {
+                draw_solid_circle(pixels, w, h, icon_x, icon_y, 4.5, border_r, border_g, border_b);
+            }
+            _ => {
+                draw_line(pixels, w, h, icon_x, icon_y - 6.0, icon_x, icon_y + 6.0, 2.5, border_r, border_g, border_b);
+            }
+        }
+
+        // Center Text
+        let txt = match key_type {
+            "Caps" => if enabled { "ABC" } else { "abc" },
+            "Num" => "123",
+            _ => if enabled { "SCR" } else { "scr" },
+        };
+
+        let font = CreateFontW(22, 0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
+        let old_f = SelectObject(hdc_mem, font);
+        let _ = SetBkMode(hdc_mem, TRANSPARENT);
+        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+
+        let mut rect_txt = RECT { left: 46, top: 12, right: 104, bottom: h_px - 12 };
+        let wide: Vec<u16> = txt.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide.clone(), &mut rect_txt, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_f);
+        let _ = DeleteObject(font);
+
+        if !enabled && (key_type == "Num" || key_type == "Scroll") {
+            draw_line(pixels, w, h, 52.0, 44.0, 98.0, 20.0, 2.8, 226, 75, 75);
+        }
+
+        // Right Tag: [ ON ] / [ OFF ]
+        let font_tag = CreateFontW(14, 0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
+        let old_f2 = SelectObject(hdc_mem, font_tag);
+        let tag_str = if enabled { "ON" } else { "OFF" };
+        let tag_color = if enabled { COLORREF(0x00F8BD38) } else { COLORREF(0x0094A3B8) };
+        SetTextColor(hdc_mem, tag_color);
+
+        let mut rect_tag = RECT { left: 108, top: 16, right: w_px - 14, bottom: h_px - 16 };
+        let wide_tag: Vec<u16> = tag_str.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide_tag.clone(), &mut rect_tag, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_f2);
+        let _ = DeleteObject(font_tag);
+
+        fix_gdi_text_alpha(pixels, w, h);
+        commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
+    }
+}
+
+// =========================================================================
+// THEME 3: NeumorphicKey — Tactile 3D physical keycap
+// =========================================================================
+fn render_neumorphic_key(
+    hwnd: HWND,
+    x: i32,
+    y: i32,
+    w_px: i32,
+    h_px: i32,
+    key_type: &str,
+    enabled: bool,
+) {
+    let w = w_px as usize;
+    let h = h_px as usize;
+
+    unsafe {
+        let hdc_screen = windows::Win32::Graphics::Gdi::GetDC(None);
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w_px,
+                biHeight: -h_px,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut p_bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let hbmp = CreateDIBSection(hdc_mem, &bmi, DIB_RGB_COLORS, &mut p_bits, None, 0).unwrap_or_default();
+        if hbmp.0.is_null() || p_bits.is_null() {
+            let _ = DeleteDC(hdc_mem);
+            windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
+            return;
+        }
+        let old_bmp = SelectObject(hdc_mem, hbmp);
+        let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
+
+        // Base plate (Dark charcoal #121418, alpha 252)
+        let rad = (h_px as f32) * 0.16;
+        draw_base_rounded_background(pixels, w, h, rad, 252.0, 16, 18, 22);
+
+        // 3D Keycap bevel (size ~96x96)
+        let km = 18.0f32;
+        let kr = 14.0f32;
+        // Keycap body fill
+        draw_solid_round_rect(pixels, w, h, km, km, (w_px as f32) - km, (h_px as f32) - km, kr, 32, 36, 46, 255);
+        // Highlight top rim
+        draw_round_rect_stroke(pixels, w, h, km, km, (w_px as f32) - km, (h_px as f32) - km, kr, 1.6, 68, 76, 94);
+
+        // LED Indicator on keycap
+        let led_x = km + 14.0;
+        let led_y = km + 14.0;
+        let (lr, lg, lb) = if enabled { (56u8, 189u8, 248u8) } else { (64u8, 72u8, 88u8) };
+        draw_solid_circle(pixels, w, h, led_x, led_y, 4.2, lr, lg, lb);
+
+        // Center Text
+        let txt = match key_type {
+            "Caps" => if enabled { "ABC" } else { "abc" },
+            "Num" => "123",
+            _ => if enabled { "SCR" } else { "scr" },
+        };
+
+        let font = CreateFontW(30, 0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
+        let old_f = SelectObject(hdc_mem, font);
+        let _ = SetBkMode(hdc_mem, TRANSPARENT);
+        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+
+        let mut rect_txt = RECT { left: km as i32, top: (km + 10.0) as i32, right: (w_px as f32 - km) as i32, bottom: (h_px as f32 - km) as i32 };
+        let wide: Vec<u16> = txt.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide.clone(), &mut rect_txt, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_f);
+        let _ = DeleteObject(font);
+
+        if !enabled && (key_type == "Num" || key_type == "Scroll") {
+            draw_line(pixels, w, h, km + 12.0, (h_px as f32) - km - 14.0, (w_px as f32) - km - 12.0, km + 14.0, 3.8, 226, 75, 75);
+        }
+
+        fix_gdi_text_alpha(pixels, w, h);
+        commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
+    }
+}
+
+// =========================================================================
+// THEME 4: DynamicIsland — Fluid rounded capsule
+// =========================================================================
+fn render_dynamic_island(
+    hwnd: HWND,
+    x: i32,
+    y: i32,
+    w_px: i32,
+    h_px: i32,
+    key_type: &str,
+    enabled: bool,
+) {
+    let w = w_px as usize;
+    let h = h_px as usize;
+
+    unsafe {
+        let hdc_screen = windows::Win32::Graphics::Gdi::GetDC(None);
+        let hdc_mem = CreateCompatibleDC(hdc_screen);
+        let bmi = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: w_px,
+                biHeight: -h_px,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut p_bits: *mut core::ffi::c_void = std::ptr::null_mut();
+        let hbmp = CreateDIBSection(hdc_mem, &bmi, DIB_RGB_COLORS, &mut p_bits, None, 0).unwrap_or_default();
+        if hbmp.0.is_null() || p_bits.is_null() {
+            let _ = DeleteDC(hdc_mem);
+            windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
+            return;
+        }
+        let old_bmp = SelectObject(hdc_mem, hbmp);
+        let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
+
+        // Piano black capsule (radius = height/2 = 34px)
+        let rad = (h_px as f32) / 2.0;
+        draw_base_rounded_background(pixels, w, h, rad, 252.0, 8, 9, 12);
+        draw_round_rect_stroke(pixels, w, h, 1.5, 1.5, (w_px as f32) - 1.5, (h_px as f32) - 1.5, rad - 1.0, 1.2, 45, 52, 66);
+
+        // Left Jewel Dot
+        let dot_x = 26.0f32;
+        let dot_y = (h_px as f32) * 0.5;
+        let (dr, dg, db) = if enabled { (34u8, 197u8, 94u8) } else { (100u8, 116u8, 139u8) };
+        draw_solid_circle(pixels, w, h, dot_x, dot_y, 5.0, dr, dg, db);
+
+        // Center text
+        let txt = match key_type {
+            "Caps" => if enabled { "ABC" } else { "abc" },
+            "Num" => "123",
+            _ => if enabled { "SCR" } else { "scr" },
+        };
+
+        let font = CreateFontW(23, 0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
+        let old_f = SelectObject(hdc_mem, font);
+        let _ = SetBkMode(hdc_mem, TRANSPARENT);
+        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+
+        let mut rect_txt = RECT { left: 44, top: 8, right: 104, bottom: h_px - 8 };
+        let wide: Vec<u16> = txt.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide.clone(), &mut rect_txt, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_f);
+        let _ = DeleteObject(font);
+
+        if !enabled && (key_type == "Num" || key_type == "Scroll") {
+            draw_line(pixels, w, h, 48.0, 48.0, 100.0, 20.0, 2.8, 226, 75, 75);
+        }
+
+        // Right Status Pill
+        let font_pill = CreateFontW(14, 0, 0, 0, FW_BOLD.0 as i32, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
+        let old_f2 = SelectObject(hdc_mem, font_pill);
+        let status_str = if enabled { "ON" } else { "OFF" };
+        let status_color = if enabled { COLORREF(0x005EDB22) } else { COLORREF(0x008B9AA9) };
+        SetTextColor(hdc_mem, status_color);
+
+        let mut rect_pill = RECT { left: 106, top: 12, right: w_px - 14, bottom: h_px - 12 };
+        let wide_s: Vec<u16> = status_str.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide_s.clone(), &mut rect_pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_f2);
+        let _ = DeleteObject(font_pill);
+
+        fix_gdi_text_alpha(pixels, w, h);
+        commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
+    }
+}
+
+// =========================================================================
+// Drawing & Layering primitives
+// =========================================================================
+
+fn draw_base_rounded_background(
+    pixels: &mut [u8],
+    w: usize,
+    h: usize,
+    radius: f32,
+    alpha: f32,
+    r_val: u8,
+    g_val: u8,
+    b_val: u8,
+) {
+    let w_f = w as f32;
+    let h_f = h as f32;
+
+    for py in 0..h {
+        for px in 0..w {
+            let fx = px as f32;
+            let fy = py as f32;
+
+            let dx = if fx < radius {
+                radius - fx
+            } else if fx > w_f - 1.0 - radius {
+                fx - (w_f - 1.0 - radius)
+            } else {
+                0.0
+            };
+
+            let dy = if fy < radius {
+                radius - fy
+            } else if fy > h_f - 1.0 - radius {
+                fy - (h_f - 1.0 - radius)
+            } else {
+                0.0
+            };
+
+            let dist = (dx * dx + dy * dy).sqrt();
+            let factor = if dist <= radius - 1.0 {
+                1.0
+            } else if dist < radius + 0.5 {
+                (radius + 0.5 - dist).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+
+            if factor > 0.0 {
+                let a = (alpha * factor) as u8;
+                let r = ((r_val as f32 * (a as f32 / 255.0)) as u8).min(255);
+                let g = ((g_val as f32 * (a as f32 / 255.0)) as u8).min(255);
+                let b = ((b_val as f32 * (a as f32 / 255.0)) as u8).min(255);
+
+                let idx = (py * w + px) * 4;
+                pixels[idx] = b;
+                pixels[idx + 1] = g;
+                pixels[idx + 2] = r;
+                pixels[idx + 3] = a;
+            }
+        }
+    }
+}
 
 fn draw_round_rect_stroke(
     pixels: &mut [u8],
@@ -819,54 +889,6 @@ fn draw_solid_circle(
     }
 }
 
-fn draw_arc(
-    pixels: &mut [u8],
-    w: usize,
-    h: usize,
-    cx: f32,
-    cy: f32,
-    radius: f32,
-    start_deg: f32,
-    end_deg: f32,
-    stroke_w: f32,
-    r: u8,
-    g: u8,
-    b: u8,
-) {
-    let half_s = stroke_w / 2.0;
-    let min_x = (cx - radius - stroke_w).max(0.0) as usize;
-    let max_x = (cx + radius + stroke_w).min(w as f32 - 1.0) as usize;
-    let min_y = (cy - radius - stroke_w).max(0.0) as usize;
-    let max_y = (cy + radius + stroke_w).min(h as f32 - 1.0) as usize;
-
-    let pi = std::f32::consts::PI;
-
-    for py in min_y..=max_y {
-        for px in min_x..=max_x {
-            let fx = px as f32;
-            let fy = py as f32;
-            let dist = ((fx - cx) * (fx - cx) + (fy - cy) * (fy - cy)).sqrt();
-            let rad_dist = (dist - radius).abs();
-
-            if rad_dist <= half_s + 0.8 {
-                let mut angle_deg = (fy - cy).atan2(fx - cx) * 180.0 / pi;
-                if angle_deg < 0.0 {
-                    angle_deg += 360.0;
-                }
-
-                if angle_deg >= start_deg && angle_deg <= end_deg {
-                    let alpha_val = if rad_dist <= half_s - 0.4 {
-                        1.0
-                    } else {
-                        ((half_s + 0.8 - rad_dist) / 1.2).clamp(0.0, 1.0)
-                    };
-                    blend_pixel(pixels, w, h, px, py, r, g, b, alpha_val);
-                }
-            }
-        }
-    }
-}
-
 #[inline]
 fn blend_pixel(pixels: &mut [u8], w: usize, _h: usize, x: usize, y: usize, r: u8, g: u8, b: u8, alpha: f32) {
     let idx = (y * w + x) * 4;
@@ -886,9 +908,9 @@ fn blend_pixel(pixels: &mut [u8], w: usize, _h: usize, x: usize, y: usize, r: u8
     }
 }
 
-fn fix_gdi_text_alpha(pixels: &mut [u8], w: usize, _h: usize, min_x: usize, max_x: usize, min_y: usize, max_y: usize) {
-    for ty in min_y..max_y {
-        for tx in min_x..max_x {
+fn fix_gdi_text_alpha(pixels: &mut [u8], w: usize, h: usize) {
+    for ty in 0..h {
+        for tx in 0..w {
             let idx = (ty * w + tx) * 4;
             let b = pixels[idx];
             let g = pixels[idx + 1];
@@ -904,4 +926,35 @@ fn fix_gdi_text_alpha(pixels: &mut [u8], w: usize, _h: usize, min_x: usize, max_
             }
         }
     }
+}
+
+unsafe fn commit_layered_window(
+    hwnd: HWND,
+    x: i32,
+    y: i32,
+    w_px: i32,
+    h_px: i32,
+    hdc_mem: windows::Win32::Graphics::Gdi::HDC,
+    old_bmp: windows::Win32::Graphics::Gdi::HGDIOBJ,
+    hbmp: windows::Win32::Graphics::Gdi::HBITMAP,
+    hdc_screen: windows::Win32::Graphics::Gdi::HDC,
+) {
+    let pt_dst = POINT { x, y };
+    let pt_src = POINT { x: 0, y: 0 };
+    let sz = SIZE { cx: w_px, cy: h_px };
+    let blend = BLENDFUNCTION {
+        BlendOp: AC_SRC_OVER as u8,
+        BlendFlags: 0,
+        SourceConstantAlpha: 255,
+        AlphaFormat: AC_SRC_ALPHA as u8,
+    };
+
+    let _ = UpdateLayeredWindow(
+        hwnd, None, Some(&pt_dst), Some(&sz), hdc_mem, Some(&pt_src), COLORREF(0), Some(&blend), ULW_ALPHA,
+    );
+
+    SelectObject(hdc_mem, old_bmp);
+    let _ = DeleteObject(hbmp);
+    let _ = DeleteDC(hdc_mem);
+    windows::Win32::Graphics::Gdi::ReleaseDC(None, hdc_screen);
 }

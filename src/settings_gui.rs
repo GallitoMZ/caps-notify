@@ -302,8 +302,10 @@ unsafe extern "system" fn settings_wndproc(
             set_f(cmb_thm);
 
             let themes = [
-                ("CapsNotifyModern", if i18n.lang == Language::Spanish { "Caps Notify Moderno (Default)" } else { "Caps Notify Modern (Default)" }),
-                ("LenovoClassic", if i18n.lang == Language::Spanish { "Lenovo Cl\u{00e1}sico (OSD Original)" } else { "Lenovo Classic (Exact OSD)" }),
+                ("CapsNotifyModern", if i18n.lang == Language::Spanish { "Modern Glass (Default)" } else { "Modern Glass (Default)" }),
+                ("CyberMinimal", if i18n.lang == Language::Spanish { "Cyber Minimal" } else { "Cyber Minimal" }),
+                ("NeumorphicKey", if i18n.lang == Language::Spanish { "Tecla Neum\u{00f3}rfica" } else { "Neumorphic Keycap" }),
+                ("DynamicIsland", if i18n.lang == Language::Spanish { "Dynamic Island" } else { "Dynamic Island" }),
             ];
             let mut sel_thm = 0;
             for (i, (code, lbl)) in themes.iter().enumerate() {
@@ -569,7 +571,7 @@ fn read_current_dialog_config() -> Config {
                 cfg.autostart = SendMessageW(HWND(c.chk_autostart as *mut _), BM_GETCHECK, WPARAM(0), LPARAM(0)).0 as usize == BST_CHECKED;
 
                 let thm_idx = SendMessageW(HWND(c.cmb_theme as *mut _), CB_GETCURSEL, WPARAM(0), LPARAM(0)).0 as usize;
-                let themes = ["CapsNotifyModern", "LenovoClassic"];
+                let themes = ["CapsNotifyModern", "CyberMinimal", "NeumorphicKey", "DynamicIsland"];
                 if thm_idx < themes.len() {
                     cfg.overlay_theme = themes[thm_idx].to_string();
                 }
