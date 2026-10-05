@@ -1,0 +1,19 @@
+# Caps Notify Configuration
+
+# Lock keys to monitor
+watch_caps = true
+watch_num = true
+watch_scroll = false
+
+# Notification options
+toast_enabled = true
+sound_enabled = false
+
+# HUD Overlay options
+overlay_enabled = false
+# Options: "TopCenter", "BottomRight", "Center", "TopRight", "BottomCenter"
+overlay_position = "TopCenter"
+overlay_duration_ms = 800
+
+# Start automatically on Windows boot
+autostart = false

@@ -1,0 +1,11 @@
+#define RT_MANIFEST 24
+
+1 ICON "app.ico"
+CAPS_ON ICON "caps_on.ico"
+CAPS_OFF ICON "caps_off.ico"
+NUM_ON ICON "num_on.ico"
+NUM_OFF ICON "num_off.ico"
+SCROLL_ON ICON "scroll_on.ico"
+SCROLL_OFF ICON "scroll_off.ico"
+
+1 RT_MANIFEST "app.manifest"

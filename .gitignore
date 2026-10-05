@@ -1,0 +1,4 @@
+/target
+**/*.rs.bk
+*.pdb
+generate_icons.py
