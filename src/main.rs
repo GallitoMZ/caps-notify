@@ -5,6 +5,8 @@ mod config;
 mod hook;
 mod notifier;
 mod overlay;
+mod settings_gui;
+mod sound;
 mod state;
 mod tray;
 
@@ -12,8 +14,11 @@ use config::Config;
 use notifier::LockKey;
 use state::STATE;
 use tray::{
-    Tray, ID_TRAY_ABOUT, ID_TRAY_AUTOSTART, ID_TRAY_CONFIG, ID_TRAY_EXIT, ID_TRAY_OVERLAY,
-    ID_TRAY_SOUND, ID_TRAY_TOASTS, WM_APP_TRAY,
+    Tray, ID_POS_BOTTOM_CENTER, ID_POS_BOTTOM_LEFT, ID_POS_BOTTOM_RIGHT, ID_POS_CENTER,
+    ID_POS_CENTER_LEFT, ID_POS_CENTER_RIGHT, ID_POS_TOP_CENTER, ID_POS_TOP_LEFT,
+    ID_POS_TOP_RIGHT, ID_SND_CLICK, ID_SND_MODERN, ID_SND_WIN, ID_TRAY_ABOUT, ID_TRAY_AUTOSTART,
+    ID_TRAY_CONFIG, ID_TRAY_EXIT, ID_TRAY_OVERLAY, ID_TRAY_SETTINGS, ID_TRAY_SOUND, ID_TRAY_TOASTS,
+    WM_APP_TRAY,
 };
 
 use std::cell::RefCell;
@@ -28,9 +33,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL, VK_NU
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    PostQuitMessage, RegisterClassW, RegisterWindowMessageW, TranslateMessage, HHOOK, MSG,
-    SW_SHOW, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WNDCLASSW,
-    WS_OVERLAPPEDWINDOW, MessageBoxW, MB_ICONINFORMATION, MB_OK,
+    MessageBoxW, PostQuitMessage, RegisterClassW, RegisterWindowMessageW, TranslateMessage,
+    HHOOK, MB_ICONINFORMATION, MB_OK, MSG, SW_SHOW, WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK,
+    WM_RBUTTONUP, WNDCLASSW, WS_OVERLAPPEDWINDOW,
 };
 
 const WINDOW_CLASS_NAME: PCWSTR = w!("CapsNotifyHiddenWindow");
@@ -43,7 +48,7 @@ thread_local! {
 
 static APP_CONFIG: Mutex<Option<Config>> = Mutex::new(None);
 
-fn get_config() -> Config {
+pub fn get_config() -> Config {
     if let Ok(guard) = APP_CONFIG.lock() {
         if let Some(cfg) = &*guard {
             return cfg.clone();
@@ -52,7 +57,7 @@ fn get_config() -> Config {
     Config::load()
 }
 
-fn update_config<F: FnOnce(&mut Config)>(f: F) {
+pub fn update_config<F: FnOnce(&mut Config)>(f: F) {
     if let Ok(mut guard) = APP_CONFIG.lock() {
         if let Some(cfg) = &mut *guard {
             f(cfg);
@@ -61,8 +66,19 @@ fn update_config<F: FnOnce(&mut Config)>(f: F) {
     }
 }
 
+pub fn set_config(cfg: Config) {
+    if let Ok(mut guard) = APP_CONFIG.lock() {
+        *guard = Some(cfg.clone());
+    }
+    TRAY_INSTANCE.with(|t| {
+        if let Some(tray) = t.borrow().as_ref() {
+            tray.update(&STATE, &cfg);
+        }
+    });
+}
+
 fn main() -> windows::core::Result<()> {
-    // 1. Initialize COM apartment for WinRT toasts and Shell APIs
+    // 1. Initialize COM apartment
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
     }
@@ -118,7 +134,20 @@ fn main() -> windows::core::Result<()> {
         HOOK_HANDLE.with(|h| *h.borrow_mut() = Some(hhook));
     }
 
-    // 8. Classical Win32 message loop (event-driven, 0% CPU idle)
+    // 8. Immediate visual confirmation on startup:
+    // Show HUD briefly so user immediately knows Caps Notify is active!
+    if cfg.overlay_enabled {
+        overlay::show("Caps Lock", STATE.is_caps_on(), &cfg);
+    }
+
+    // Open Settings Window on startup if configured (default: true)
+    if cfg.show_settings_on_start {
+        settings_gui::open_settings(cfg.clone(), |new_cfg| {
+            set_config(new_cfg);
+        });
+    }
+
+    // 9. Classical Win32 message loop
     unsafe {
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).into() {
@@ -127,7 +156,7 @@ fn main() -> windows::core::Result<()> {
         }
     }
 
-    // 9. Cleanup
+    // 10. Cleanup
     unsafe {
         CoUninitialize();
     }
@@ -144,7 +173,6 @@ unsafe extern "system" fn wndproc(
     let taskbar_created = TASKBAR_RESTART_MSG.with(|m| *m.borrow());
 
     if msg == taskbar_created && taskbar_created != 0 {
-        // Explorer restarted: re-create tray icon
         let cfg = get_config();
         TRAY_INSTANCE.with(|t| {
             if let Some(tray) = t.borrow().as_ref() {
@@ -161,43 +189,56 @@ unsafe extern "system" fn wndproc(
             let cfg = get_config();
 
             if vk == VK_CAPITAL.0 {
-                let current = (GetKeyState(VK_CAPITAL.0 as i32) & 0x0001) != 0;
-                let prev = STATE.caps.swap(current, Ordering::SeqCst);
-                if prev != current {
-                    TRAY_INSTANCE.with(|t| {
-                        if let Some(tray) = t.borrow().as_ref() {
-                            tray.update(&STATE, &cfg);
-                        }
-                    });
-                    if cfg.watch_caps {
-                        notifier::notify(LockKey::Caps, current, &cfg);
+                let prev = STATE.caps.load(Ordering::SeqCst);
+                let sys = (GetKeyState(VK_CAPITAL.0 as i32) & 0x0001) != 0;
+                // Always flip dynamically: if GetKeyState already changed use sys, else invert prev
+                let new_state = if sys != prev { sys } else { !prev };
+                STATE.caps.store(new_state, Ordering::SeqCst);
+
+                TRAY_INSTANCE.with(|t| {
+                    if let Some(tray) = t.borrow().as_ref() {
+                        tray.update(&STATE, &cfg);
                     }
+                });
+
+                settings_gui::update_live_status();
+
+                if cfg.watch_caps {
+                    notifier::notify(LockKey::Caps, new_state, &cfg);
                 }
             } else if vk == VK_NUMLOCK.0 {
-                let current = (GetKeyState(VK_NUMLOCK.0 as i32) & 0x0001) != 0;
-                let prev = STATE.num.swap(current, Ordering::SeqCst);
-                if prev != current {
-                    TRAY_INSTANCE.with(|t| {
-                        if let Some(tray) = t.borrow().as_ref() {
-                            tray.update(&STATE, &cfg);
-                        }
-                    });
-                    if cfg.watch_num {
-                        notifier::notify(LockKey::Num, current, &cfg);
+                let prev = STATE.num.load(Ordering::SeqCst);
+                let sys = (GetKeyState(VK_NUMLOCK.0 as i32) & 0x0001) != 0;
+                let new_state = if sys != prev { sys } else { !prev };
+                STATE.num.store(new_state, Ordering::SeqCst);
+
+                TRAY_INSTANCE.with(|t| {
+                    if let Some(tray) = t.borrow().as_ref() {
+                        tray.update(&STATE, &cfg);
                     }
+                });
+
+                settings_gui::update_live_status();
+
+                if cfg.watch_num {
+                    notifier::notify(LockKey::Num, new_state, &cfg);
                 }
             } else if vk == VK_SCROLL.0 {
-                let current = (GetKeyState(VK_SCROLL.0 as i32) & 0x0001) != 0;
-                let prev = STATE.scroll.swap(current, Ordering::SeqCst);
-                if prev != current {
-                    TRAY_INSTANCE.with(|t| {
-                        if let Some(tray) = t.borrow().as_ref() {
-                            tray.update(&STATE, &cfg);
-                        }
-                    });
-                    if cfg.watch_scroll {
-                        notifier::notify(LockKey::Scroll, current, &cfg);
+                let prev = STATE.scroll.load(Ordering::SeqCst);
+                let sys = (GetKeyState(VK_SCROLL.0 as i32) & 0x0001) != 0;
+                let new_state = if sys != prev { sys } else { !prev };
+                STATE.scroll.store(new_state, Ordering::SeqCst);
+
+                TRAY_INSTANCE.with(|t| {
+                    if let Some(tray) = t.borrow().as_ref() {
+                        tray.update(&STATE, &cfg);
                     }
+                });
+
+                settings_gui::update_live_status();
+
+                if cfg.watch_scroll {
+                    notifier::notify(LockKey::Scroll, new_state, &cfg);
                 }
             }
 
@@ -218,18 +259,43 @@ unsafe extern "system" fn wndproc(
                     });
                 }
                 WM_LBUTTONDBLCLK => {
-                    // Double click opens config
-                    open_config_file();
+                    // Double click opens Settings GUI
+                    let cfg = get_config();
+                    settings_gui::open_settings(cfg, |new_cfg| {
+                        set_config(new_cfg);
+                    });
                 }
                 _ => {}
             }
             LRESULT(0)
         }
 
-        // Context menu command handlers
+        // Context menu commands
         WM_COMMAND => {
             let cmd_id = (wparam.0 & 0xffff) as usize;
             match cmd_id {
+                ID_TRAY_SETTINGS => {
+                    let cfg = get_config();
+                    settings_gui::open_settings(cfg, |new_cfg| {
+                        set_config(new_cfg);
+                    });
+                }
+                // Positions
+                ID_POS_TOP_CENTER => set_position_and_preview("TopCenter"),
+                ID_POS_TOP_LEFT => set_position_and_preview("TopLeft"),
+                ID_POS_TOP_RIGHT => set_position_and_preview("TopRight"),
+                ID_POS_CENTER_LEFT => set_position_and_preview("CenterLeft"),
+                ID_POS_CENTER => set_position_and_preview("Center"),
+                ID_POS_CENTER_RIGHT => set_position_and_preview("CenterRight"),
+                ID_POS_BOTTOM_LEFT => set_position_and_preview("BottomLeft"),
+                ID_POS_BOTTOM_CENTER => set_position_and_preview("BottomCenter"),
+                ID_POS_BOTTOM_RIGHT => set_position_and_preview("BottomRight"),
+
+                // Sound Themes
+                ID_SND_MODERN => set_sound_theme_and_preview("ModernChime"),
+                ID_SND_CLICK => set_sound_theme_and_preview("KeyClick"),
+                ID_SND_WIN => set_sound_theme_and_preview("WindowsDefault"),
+
                 ID_TRAY_AUTOSTART => {
                     if autostart::is_enabled() {
                         let _ = autostart::disable();
@@ -244,25 +310,24 @@ unsafe extern "system" fn wndproc(
                 }
                 ID_TRAY_SOUND => {
                     update_config(|c| c.sound_enabled = !c.sound_enabled);
+                    let cfg = get_config();
+                    if cfg.sound_enabled {
+                        sound::play(&cfg.sound_theme, true);
+                    }
                 }
                 ID_TRAY_OVERLAY => {
                     update_config(|c| c.overlay_enabled = !c.overlay_enabled);
                     let cfg = get_config();
                     if cfg.overlay_enabled {
-                        overlay::show(
-                            "Caps Lock",
-                            STATE.is_caps_on(),
-                            &cfg.overlay_position,
-                            cfg.overlay_duration_ms,
-                        );
+                        overlay::show("Caps Lock", STATE.is_caps_on(), &cfg);
                     }
                 }
                 ID_TRAY_CONFIG => {
                     open_config_file();
                 }
                 ID_TRAY_ABOUT => {
-                    let text = w!("Caps Notify v0.1.0\n\nLightweight lock key tray indicator for Windows.\nZero polling, ultra-low resource footprint.\n\nAuthor: GallitoMZ\nLicense: MIT");
-                    let title = w!("About Caps Notify");
+                    let text = w!("Caps Notify v0.1.0\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nInspirado en el OSD de Lenovo con personalizaci\u{00f3}n completa.\n\nAutor: GallitoMZ\nLicencia: MIT");
+                    let title = w!("Acerca de Caps Notify");
                     MessageBoxW(hwnd, text, title, MB_ICONINFORMATION | MB_OK);
                 }
                 ID_TRAY_EXIT => {
@@ -274,21 +339,18 @@ unsafe extern "system" fn wndproc(
         }
 
         WM_DESTROY => {
-            // Uninstall keyboard hook
             HOOK_HANDLE.with(|h| {
                 if let Some(hhook) = h.borrow_mut().take() {
                     hook::uninstall(hhook);
                 }
             });
 
-            // Remove tray icon
             TRAY_INSTANCE.with(|t| {
                 if let Some(tray) = t.borrow_mut().take() {
                     tray.remove();
                 }
             });
 
-            // Destroy overlay window if open
             overlay::destroy();
 
             PostQuitMessage(0);
@@ -297,6 +359,20 @@ unsafe extern "system" fn wndproc(
 
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
+}
+
+fn set_position_and_preview(pos: &str) {
+    update_config(|c| c.overlay_position = pos.to_string());
+    let cfg = get_config();
+    overlay::show("Caps Lock", STATE.is_caps_on(), &cfg);
+}
+
+fn set_sound_theme_and_preview(theme: &str) {
+    update_config(|c| {
+        c.sound_theme = theme.to_string();
+        c.sound_enabled = true;
+    });
+    sound::play(theme, true);
 }
 
 fn open_config_file() {

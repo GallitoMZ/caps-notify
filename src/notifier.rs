@@ -1,9 +1,9 @@
 use crate::config::Config;
 use crate::overlay;
-use windows::core::{w, HSTRING};
+use crate::sound;
+use windows::core::HSTRING;
 use windows::Data::Xml::Dom::XmlDocument;
 use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
-use windows::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC, SND_NODEFAULT};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LockKey {
@@ -22,25 +22,25 @@ impl LockKey {
     }
 }
 
-/// Dispatches notifications (Toasts, Sound, Overlay) based on configuration
+/// Dispatches notifications (HUD, Sound, Toasts) based on configuration
 pub fn notify(key: LockKey, enabled: bool, cfg: &Config) {
-    let state_str = if enabled { "ON" } else { "OFF" };
+    let state_str = if enabled { "ACTIVADO" } else { "DESACTIVADO" };
     let title = "Caps Notify";
-    let message = format!("{} is now {}", key.name(), state_str);
+    let message = format!("{} está ahora {}", key.name(), state_str);
 
-    // 1. Toast Notification via WinRT
+    // 1. Floating HUD Overlay (Default enabled, inspired by Lenovo OSD)
+    if cfg.overlay_enabled {
+        overlay::show(key.name(), enabled, cfg);
+    }
+
+    // 2. High-fidelity harmonic audio chime / key click
+    if cfg.sound_enabled {
+        sound::play(&cfg.sound_theme, enabled);
+    }
+
+    // 3. Optional Toast Notification via WinRT
     if cfg.toast_enabled {
         let _ = show_toast(title, &message);
-    }
-
-    // 2. Audio playback
-    if cfg.sound_enabled {
-        play_sound();
-    }
-
-    // 3. Floating HUD overlay
-    if cfg.overlay_enabled {
-        overlay::show(key.name(), enabled, &cfg.overlay_position, cfg.overlay_duration_ms);
     }
 }
 
@@ -55,21 +55,9 @@ fn show_toast(title: &str, body: &str) -> windows::core::Result<()> {
     doc.LoadXml(&HSTRING::from(xml_content))?;
 
     let toast = ToastNotification::CreateToastNotification(&doc)?;
-    // Use App User Model ID
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from("CapsNotify"))?;
     notifier.Show(&toast)?;
     Ok(())
-}
-
-fn play_sound() {
-    unsafe {
-        // Native Windows notification chime
-        let _ = PlaySoundW(
-            w!("SystemNotification"),
-            None,
-            SND_ALIAS | SND_ASYNC | SND_NODEFAULT,
-        );
-    }
 }
 
 fn escape_xml(input: &str) -> String {

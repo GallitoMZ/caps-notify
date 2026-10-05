@@ -4,20 +4,38 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=flat-square)](https://microsoft.com/windows)
 
-**Caps Notify** es una aplicación Windows nativa, ultraligera, de código abierto y residente en la bandeja del sistema (*System Tray*). Notifica el estado en tiempo real de **Caps Lock** (Bloq Mayús), **Num Lock** (Bloq Num) y **Scroll Lock** (Bloq Despl) con un consumo de recursos prácticamente nulo.
+**Caps Notify** es una aplicación Windows nativa, ultraligera (< 500 KB), de código abierto y residente en la bandeja del sistema (*System Tray*). Notifica el estado en tiempo real de **Caps Lock** (Bloq Mayús), **Num Lock** (Bloq Num) y **Scroll Lock** (Bloq Despl) con un diseño inspirado en el clásico OSD de Lenovo, sonido armónico moderno y cero polling de CPU.
 
 ---
 
 ## 🌟 Características clave
 
-- **Iconos dinámicos en la bandeja**: Reflejan al instante el estado activado/desactivado de las teclas de bloqueo.
-- **Event-Driven puro (0% CPU en reposo)**: Utiliza un gancho de teclado de bajo nivel (`WH_KEYBOARD_LL`) nativo de Win32. Cero polling, cero temporizadores en segundo plano.
-- **Notificaciones Toast nativas**: Integración fluida mediante WinRT Toast Notification Manager.
-- **HUD Overlay flotante opcional**: Ventana layered transparente con renderizado suave y temporizador de desvanecimiento automático.
-- **Autoarranque con Windows**: Configuración opcional en el registro (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run`) sin tareas programadas pesadas.
-- **Persistencia de configuración**: Configurable en formato TOML en `%APPDATA%\caps-notify\config.toml`.
-- **Resiliente ante reinicios del Explorer**: Se suscribe al mensaje `TaskbarCreated` para reaparecer automáticamente si `explorer.exe` se reinicia.
-- **Zero dependencias en tiempo de ejecución**: No requiere .NET Runtime ni VC++ Redistributable. Binario único y portable.
+- **HUD Flotante OSD estilo Lenovo**:
+  - Activado por defecto.
+  - Diseño fiel y elegante inspirado en los indicadores OSD de teclas físicas (*Keycap* con esquina redondeada, hendidura esférica 3D y símbolos limpios).
+  - **Caps Lock**: Muestra `ABC` en mayúsculas al activarse y `abc` en minúsculas al desactivarse con la flecha `^`.
+  - **Num Lock**: Muestra el LED circular y `123`, con tachado diagonal `\` al desactivarse.
+  - **Scroll Lock**: Muestra el indicador `SCR` / `scr` con tachado.
+  - **100% dinámico y reactivo**: Si pulsas la tecla rápidamente en ráfaga, el indicador actualiza su estado de forma instantánea sin retrasos ni fotogramas desfasados.
+  - Renderizado directo en **Desktop Window Manager (DWM)** con alpha real por píxel (`UpdateLayeredWindow`).
+- **9 Posiciones en pantalla**:
+  - Arriba Centro, Arriba Izquierda, Arriba Derecha.
+  - Centro Izquierda, Centro Total, Centro Derecha.
+  - Abajo Izquierda, Abajo Centro, Abajo Derecha.
+- **Audio Chime Moderno y Sintetizado**:
+  - Cero dependencias ni archivos externos.
+  - Generador de audio procedural PCM en memoria:
+    - **Chime Moderno**: Un ding armónico cristalino y suave (880 Hz para ON, 587 Hz para OFF), al estilo de interfaces modernas como macOS e iOS.
+    - **Clic Mecánico**: Sonido táctil y sutil de switch mecánico (25 ms).
+    - **Sonido Windows**: Sonido predeterminado del sistema.
+- **Ventana Nativa de Configuración**:
+  - Se abre al iniciar la aplicación (configurable) o con doble clic en el icono de la bandeja.
+  - Muestra el estado en tiempo real de las teclas de bloqueo.
+  - Selector de temas, posiciones, tamaños, duración y botones de prueba en vivo (**👁️ Probar HUD** y **🔊 Probar sonido**).
+- **Event-Driven puro (0% CPU en reposo)**:
+  - Gancho de teclado de bajo nivel (`WH_KEYBOARD_LL`) con cola asíncrona. Cero bucles en segundo plano.
+- **Autoarranque opcional con Windows**:
+  - Integrado en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
 ---
 
@@ -25,37 +43,21 @@
 
 | Métrica | Caps Notify (Rust) | TrayStatus Free | Lenovo Hotkeys |
 |---|---|---|---|
-| **Tamaño del binario** | **~1.2 MB** | ~18 MB | ~65 MB |
-| **RAM en reposo** | **< 2.5 MB** | 45 MB | 70 MB |
+| **Tamaño del binario** | **~458 KB (0.45 MB)** | ~18 MB | ~65 MB |
+| **RAM en reposo** | **< 4.5 MB** | 45 MB | 70 MB |
 | **CPU en reposo** | **0.0%** (Event-driven) | ~0.1% - 0.5% | ~0.2% - 1.0% |
 | **Framework requerido** | **Ninguno** (Win32 nativo) | .NET 8 / WPF | UWP / Electron |
 | **Tiempo de arranque** | **< 15 ms** | ~850 ms | ~1500 ms |
 
 ---
 
-## 🛠️ Requisitos previos para compilar
-
-1. **Rust Toolchain**:
-   - Descarga e instala `rustup` desde [rustup.rs](https://rustup.rs/).
-   - Toolchain recomendada: `stable-x86_64-pc-windows-msvc`.
-2. **Visual Studio C++ Build Tools**:
-   - Descarga el instalador desde [Visual Studio C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
-   - Durante la instalación, selecciona la carga de trabajo: **"Desarrollo para el escritorio con C++"** (*Desktop development with C++*).
-
----
-
 ## 🚀 Compilación y ejecución
 
-### Modo desarrollo
-```powershell
-cargo run
-```
-
-### Compilación Release optimizada (Binario mínimo)
+### Compilación Release optimizada
 ```powershell
 cargo build --release
 ```
-El archivo ejecutable portable se generará en:
+El ejecutable final se genera en:
 ```
 target\release\caps-notify.exe
 ```
@@ -64,7 +66,7 @@ target\release\caps-notify.exe
 
 ## ⚙️ Configuración (`config.toml`)
 
-El archivo de configuración se crea automáticamente en `%APPDATA%\caps-notify\config.toml`:
+Ubicado en `%APPDATA%\caps-notify\config.toml`:
 
 ```toml
 # Teclas de bloqueo a monitorizar
@@ -72,65 +74,28 @@ watch_caps = true
 watch_num = true
 watch_scroll = false
 
-# Notificaciones
-toast_enabled = true
+# HUD Flotante (OSD)
+overlay_enabled = true
+# Opciones: "TopCenter", "TopLeft", "TopRight", "CenterLeft", "Center", "CenterRight", "BottomLeft", "BottomCenter", "BottomRight"
+overlay_position = "TopCenter"
+# Opciones: "LenovoKeycap", "AccentColor"
+overlay_theme = "LenovoKeycap"
+# Opciones: "Small" (104px), "Medium" (128px), "Large" (156px)
+overlay_size = "Medium"
+overlay_duration_ms = 850
+
+# Sonido
 sound_enabled = false
+# Opciones: "ModernChime", "KeyClick", "WindowsDefault"
+sound_theme = "ModernChime"
 
-# HUD Overlay en pantalla
-overlay_enabled = false
-overlay_position = "TopCenter" # Opciones: "TopCenter", "BottomRight", "Center", "TopRight", "BottomCenter"
-overlay_duration_ms = 800
+# Notificaciones Toast de Windows
+toast_enabled = false
 
-# Iniciar automáticamente al encender Windows
+# Sistema
 autostart = false
+show_settings_on_start = true
 ```
-
-Puedes abrir directamente el archivo de configuración haciendo clic derecho sobre el icono en la bandeja del sistema y seleccionando **"Open Config File"**.
-
----
-
-## 📂 Estructura del proyecto
-
-```
-caps-notify/
-├── .github/
-│   └── workflows/
-│       └── release.yml          # CI/CD para compilar y publicar releases
-├── assets/
-│   ├── app.ico                  # Icono de la aplicación
-│   ├── app.manifest             # Manifest DPI-Aware (PerMonitorV2)
-│   ├── app.rc                   # Recursos de Windows
-│   ├── caps_on.ico              # Indicador Mayús Activado
-│   ├── caps_off.ico             # Indicador Mayús Desactivado
-│   ├── num_on.ico               # Indicador Numérico Activado
-│   ├── num_off.ico              # Indicador Numérico Desactivado
-│   ├── scroll_on.ico            # Indicador Desplazamiento Activado
-│   └── scroll_off.ico           # Indicador Desplazamiento Desactivado
-├── src/
-│   ├── main.rs                  # Loop de mensajes Win32 y ventana oculta
-│   ├── config.rs                # Gestor de configuración TOML
-│   ├── hook.rs                  # WH_KEYBOARD_LL con PostMessage asíncrono
-│   ├── state.rs                 # Estado compartido con AtomicBool
-│   ├── tray.rs                  # Icono en bandeja y menú contextual
-│   ├── notifier.rs              # Notificaciones WinRT, sonido y HUD
-│   ├── overlay.rs               # Ventana HUD transparente
-│   └── autostart.rs             # Gestión de clave Run en HKCU
-├── Cargo.toml                   # Perfil release optimizado ("z", LTO, strip)
-├── build.rs                     # Compilación de recursos Win32
-├── config.default.toml          # Configuración por defecto
-├── LICENSE                      # MIT
-└── README.md
-```
-
----
-
-## 🛡️ Antivirus y Falsos Positivos
-
-Debido a que `caps-notify` es un ejecutable compacto y no firmado que utiliza `SetWindowsHookExW` (`WH_KEYBOARD_LL`) para interceptar teclas globales en tiempo real sin polling, algunos programas antivirus heurísticos pueden alertar sobre él preventivamente.
-
-- El código fuente completo es 100% abierto y auditable en este repositorio.
-- El hook solo escucha las teclas virtuales `VK_CAPITAL`, `VK_NUMLOCK` y `VK_SCROLL`.
-- No almacena pulsaciones de teclas ni realiza conexiones de red.
 
 ---
 

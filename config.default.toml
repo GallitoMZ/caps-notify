@@ -5,15 +5,24 @@ watch_caps = true
 watch_num = true
 watch_scroll = false
 
-# Notification options
-toast_enabled = true
-sound_enabled = false
-
 # HUD Overlay options
-overlay_enabled = false
-# Options: "TopCenter", "BottomRight", "Center", "TopRight", "BottomCenter"
+overlay_enabled = true
+# Positions: "TopCenter", "TopLeft", "TopRight", "CenterLeft", "Center", "CenterRight", "BottomLeft", "BottomCenter", "BottomRight"
 overlay_position = "TopCenter"
-overlay_duration_ms = 800
+# Themes: "LenovoKeycap", "AccentColor", "ModernBadge"
+overlay_theme = "LenovoKeycap"
+# Sizes: "Small" (104px), "Medium" (128px), "Large" (156px)
+overlay_size = "Medium"
+overlay_duration_ms = 850
 
-# Start automatically on Windows boot
+# Audio chime options
+sound_enabled = false
+# Themes: "ModernChime", "KeyClick", "WindowsDefault"
+sound_theme = "ModernChime"
+
+# Windows Toast Notifications
+toast_enabled = false
+
+# System options
 autostart = false
+show_settings_on_start = true

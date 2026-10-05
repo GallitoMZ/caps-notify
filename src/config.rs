@@ -9,10 +9,14 @@ pub struct Config {
     pub watch_scroll: bool,
     pub toast_enabled: bool,
     pub sound_enabled: bool,
+    pub sound_theme: String,
     pub overlay_enabled: bool,
     pub overlay_position: String,
+    pub overlay_theme: String,
+    pub overlay_size: String,
     pub overlay_duration_ms: u32,
     pub autostart: bool,
+    pub show_settings_on_start: bool,
 }
 
 impl Default for Config {
@@ -21,12 +25,16 @@ impl Default for Config {
             watch_caps: true,
             watch_num: true,
             watch_scroll: false,
-            toast_enabled: true,
+            toast_enabled: false,
             sound_enabled: false,
-            overlay_enabled: false,
+            sound_theme: "ModernChime".to_string(),
+            overlay_enabled: true, // Enabled by default as requested
             overlay_position: "TopCenter".to_string(),
-            overlay_duration_ms: 800,
+            overlay_theme: "LenovoKeycap".to_string(),
+            overlay_size: "Medium".to_string(),
+            overlay_duration_ms: 850,
             autostart: false,
+            show_settings_on_start: true,
         }
     }
 }
