@@ -17,13 +17,27 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Build release
+      - name: Build release binary
         run: cargo build --release --target x86_64-pc-windows-msvc
 
-      - name: Create release
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Installer
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DExeSource="target\x86_64-pc-windows-msvc\release\caps-notify.exe" installer.iss
+
+      - name: Prepare Release Artifacts
+        run: |
+          Copy-Item target\x86_64-pc-windows-msvc\release\caps-notify.exe dist\caps-notify-portable.exe
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/x86_64-pc-windows-msvc/release/caps-notify.exe
+          files: |
+            dist/caps-notify-setup.exe
+            dist/caps-notify-portable.exe
+            target/x86_64-pc-windows-msvc/release/caps-notify.exe
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

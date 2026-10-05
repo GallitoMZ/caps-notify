@@ -80,9 +80,15 @@ Designed for peak efficiency and aesthetics: **0.0% idle CPU** (event-driven, ze
 
 ## 🚀 Installation & Usage
 
-### Pre-built Binary
-Download the latest standalone executable from [**Releases**](https://github.com/GallitoMZ/caps-notify/releases).
-Just run `caps-notify.exe` — no installer required (portable).
+### Pre-built Binaries
+Download the latest version from [**GitHub Releases**](https://github.com/GallitoMZ/caps-notify/releases):
+- **`caps-notify-setup.exe`**: Classic Windows installer with start menu integration, desktop shortcut, optional autostart, and clean uninstaller in Windows Settings.
+- **`caps-notify-portable.exe`**: Standalone single-file executable. No installation required; run directly from any folder or USB drive.
+
+#### 💻 System & Architecture Compatibility
+- **x86_64 / AMD64 (64-bit)**: Native support for all modern Intel Core and AMD Ryzen systems on Windows 10 and 11.
+- **ARM64 (Snapdragon / Surface)**: Fully compatible with Windows 11 on ARM (e.g. Snapdragon X Elite, Surface Pro 11) via the native Prism emulation engine with zero configuration needed.
+
 
 ### Build from Source
 **Prerequisites**:
