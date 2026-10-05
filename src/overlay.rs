@@ -59,9 +59,10 @@ pub fn show(key_name: &str, enabled: bool, cfg: &Config) {
     }
 
     let (win_w, win_h) = match cfg.overlay_theme.as_str() {
-        "CyberMinimal" => (168, 64),
-        "DynamicIsland" => (156, 68),
-        _ => (130, 130), // Default & Neumorphic
+        "CyberMinimal" => (176, 64),
+        "DynamicIsland" => (160, 68),
+        "NeumorphicKey" => (130, 130),
+        _ => (144, 144), // CapsNotifyModern
     };
 
     let (screen_w, screen_h) = unsafe {
@@ -125,8 +126,8 @@ fn get_or_create_overlay() -> HWND {
             WS_POPUP,
             0,
             0,
-            168,
-            130,
+            200,
+            160,
             None,
             None,
             instance,
@@ -218,113 +219,142 @@ fn render_caps_notify_modern(
         let old_bmp = SelectObject(hdc_mem, hbmp);
         let pixels = std::slice::from_raw_parts_mut(p_bits as *mut u8, w * h * 4);
 
-        // 1. Dark Opaque Background (alpha = 252 so nothing underneath bleeds through!)
-        let bg_radius = (h_px as f32) * 0.17;
-        let bg_alpha = 252.0f32;
+        // 1. Dark, opaque obsidian background (alpha = 252 for zero bleed-through)
+        let bg_radius = 24.0f32;
+        draw_base_rounded_background(pixels, w, h, bg_radius, 252.0, 13, 17, 23);
 
-        draw_base_rounded_background(pixels, w, h, bg_radius, bg_alpha, 14, 17, 24);
-
-        // 2. Subtle, elegant accent border (No harsh neon, soft teal/cyan in ON, slate in OFF)
+        // 2. Single, continuous outer border (zero inner lines, zero superimposed artifacts)
         let (border_r, border_g, border_b) = if enabled {
-            (45u8, 212u8, 191u8) // Soft Teal/Cyan #2DD4BF
+            (45u8, 212u8, 191u8) // Soft luminous Teal/Cyan #2DD4BF
         } else {
-            (51u8, 65u8, 85u8) // Slate 700
+            (51u8, 65u8, 85u8) // Slate 700 #334155
         };
-        draw_round_rect_stroke(pixels, w, h, 1.5, 1.5, (w_px as f32) - 1.5, (h_px as f32) - 1.5, bg_radius - 1.0, 1.4, border_r, border_g, border_b);
+        draw_round_rect_stroke(
+            pixels, w, h,
+            1.5, 1.5,
+            (w_px as f32) - 1.5, (h_px as f32) - 1.5,
+            bg_radius - 1.0,
+            if enabled { 1.6 } else { 1.2 },
+            border_r, border_g, border_b,
+        );
 
-        // 3. Top Indicator Glyph
-        let badge_y = (h_px as f32) * 0.20;
-        let center_x = (w_px as f32) * 0.5;
+        let _ = SetBkMode(hdc_mem, TRANSPARENT);
 
-        match key_type {
-            "Caps" => {
-                let chev_w = (w_px as f32) * 0.09;
-                let chev_h = (h_px as f32) * 0.07;
-                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
-                draw_line(pixels, w, h, center_x - chev_w, badge_y + chev_h, center_x, badge_y, 3.2, cr, cg, cb);
-                draw_line(pixels, w, h, center_x, badge_y, center_x + chev_w, badge_y + chev_h, 3.2, cr, cg, cb);
-            }
-            "Num" => {
-                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
-                draw_solid_circle(pixels, w, h, center_x, badge_y + 3.0, (w_px as f32) * 0.040, cr, cg, cb);
-            }
-            _ => {
-                let (cr, cg, cb) = if enabled { (45u8, 212u8, 191u8) } else { (100u8, 116u8, 139u8) };
-                let sc_len = (h_px as f32) * 0.045;
-                draw_line(pixels, w, h, center_x, badge_y - sc_len + 3.0, center_x, badge_y + sc_len + 3.0, 2.8, cr, cg, cb);
-            }
-        }
+        // 3. Top Header: Key Name (Clean Segoe UI Semibold)
+        let header_text = match key_type {
+            "Caps" => "CAPS LOCK",
+            "Num" => "NUM LOCK",
+            _ => "SCROLL LOCK",
+        };
+        let font_hdr = CreateFontW(
+            12, 0, 0, 0, FW_SEMIBOLD.0 as i32,
+            0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
+        );
+        let old_font_hdr = SelectObject(hdc_mem, font_hdr);
+        let hdr_color = if enabled {
+            COLORREF(0x2D | (0xD4 << 8) | (0xBF << 16)) // Soft Teal #2DD4BF
+        } else {
+            COLORREF(148 | (163 << 8) | (184 << 16)) // Slate-400 #94A3B8
+        };
+        SetTextColor(hdc_mem, hdr_color);
 
-        // 4. Center Text: "ABC" (ON) / "abc" (OFF) for Caps; "123" for Num; "SCR" for Scroll
-        let (center_text, font_size) = match key_type {
+        let mut rect_hdr = RECT {
+            left: 8,
+            top: 15,
+            right: w_px - 8,
+            bottom: 31,
+        };
+        let wide_hdr: Vec<u16> = header_text.encode_utf16().collect();
+        DrawTextW(hdc_mem, &mut wide_hdr.clone(), &mut rect_hdr, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
+        SelectObject(hdc_mem, old_font_hdr);
+        let _ = DeleteObject(font_hdr);
+
+        // 4. Center Hero Typography: "ABC" (ON) / "abc" (OFF); "123"; "SCR"
+        let (center_text, font_size, is_bold) = match key_type {
             "Caps" => {
                 if enabled {
-                    ("ABC", ((h_px as f32) * 0.23) as i32)
+                    ("ABC", 38, true)
                 } else {
-                    ("abc", ((h_px as f32) * 0.22) as i32)
+                    ("abc", 34, false)
                 }
             }
-            "Num" => ("123", ((h_px as f32) * 0.23) as i32),
+            "Num" => {
+                if enabled {
+                    ("123", 38, true)
+                } else {
+                    ("123", 36, false)
+                }
+            }
             _ => {
                 if enabled {
-                    ("SCR", ((h_px as f32) * 0.20) as i32)
+                    ("SCR", 32, true)
                 } else {
-                    ("scr", ((h_px as f32) * 0.20) as i32)
+                    ("SCR", 32, false)
                 }
             }
         };
 
         let font_title = CreateFontW(
-            font_size, 0, 0, 0, if enabled { FW_BOLD.0 as i32 } else { FW_SEMIBOLD.0 as i32 },
+            font_size, 0, 0, 0,
+            if is_bold { FW_BOLD.0 as i32 } else { FW_SEMIBOLD.0 as i32 },
             0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
         );
-        let old_font = SelectObject(hdc_mem, font_title);
-        let _ = SetBkMode(hdc_mem, TRANSPARENT);
-        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+        let old_font_title = SelectObject(hdc_mem, font_title);
+        let title_color = if enabled {
+            COLORREF(0x00FFFFFF) // Pure White
+        } else {
+            COLORREF(148 | (163 << 8) | (184 << 16)) // Soft Slate #94A3B8
+        };
+        SetTextColor(hdc_mem, title_color);
 
         let mut rect_title = RECT {
-            left: 6,
-            top: ((h_px as f32) * 0.35) as i32,
-            right: w_px - 6,
-            bottom: ((h_px as f32) * 0.65) as i32,
+            left: 8,
+            top: 36,
+            right: w_px - 8,
+            bottom: 96,
         };
         let wide_title: Vec<u16> = center_text.encode_utf16().collect();
         DrawTextW(hdc_mem, &mut wide_title.clone(), &mut rect_title, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(hdc_mem, old_font);
+        SelectObject(hdc_mem, old_font_title);
         let _ = DeleteObject(font_title);
 
-        // Diagonal slash through 123 if Num Lock is OFF (or Scroll Lock OFF)
+        // Diagonal slash through 123 / SCR when OFF
         if !enabled && (key_type == "Num" || key_type == "Scroll") {
-            let slash_x1 = (w_px as f32) * 0.22;
-            let slash_y1 = (h_px as f32) * 0.60;
-            let slash_x2 = (w_px as f32) * 0.78;
-            let slash_y2 = (h_px as f32) * 0.40;
-            draw_line(pixels, w, h, slash_x1, slash_y1, slash_x2, slash_y2, 3.4, 226, 75, 75); // Soft muted coral slash
+            let slash_x1 = 44.0f32;
+            let slash_y1 = 86.0f32;
+            let slash_x2 = 100.0f32;
+            let slash_y2 = 48.0f32;
+            draw_line(pixels, w, h, slash_x1, slash_y1, slash_x2, slash_y2, 3.4, 239, 68, 68); // Vivid Red/Coral #EF4444
         }
 
-        // 5. Bottom Status Pill Badge ("[ ● ON ]" / "[ ○ OFF ]")
-        let pill_w = (w_px as f32) * 0.54;
-        let pill_h = (h_px as f32) * 0.19;
+        // 5. Bottom Status Capsule Pill ("[ ● ON ]" / "[ ○ OFF ]")
+        let pill_w = 66.0f32;
+        let pill_h = 24.0f32;
         let pill_x = ((w_px as f32) - pill_w) / 2.0;
-        let pill_y = (h_px as f32) * 0.70;
+        let pill_y = 104.0f32;
         let pill_rad = pill_h / 2.0;
 
-        let (pill_r, pill_g, pill_b) = if enabled {
-            (45u8, 212u8, 191u8) // Soft Teal
+        if enabled {
+            draw_solid_round_rect(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 45, 212, 191, 38);
+            draw_round_rect_stroke(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 1.2, 45, 212, 191);
         } else {
-            (100u8, 116u8, 139u8) // Slate 500
-        };
-
-        draw_solid_round_rect(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, pill_r, pill_g, pill_b, if enabled { 36 } else { 24 });
-        draw_round_rect_stroke(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 1.2, pill_r, pill_g, pill_b);
+            draw_solid_round_rect(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 71, 85, 105, 30);
+            draw_round_rect_stroke(pixels, w, h, pill_x, pill_y, pill_x + pill_w, pill_y + pill_h, pill_rad, 1.0, 71, 85, 105);
+        }
 
         let status_str = if enabled { "● ON" } else { "○ OFF" };
         let font_sub = CreateFontW(
-            ((h_px as f32) * 0.12) as i32, 0, 0, 0, FW_BOLD.0 as i32,
+            12, 0, 0, 0,
+            if enabled { FW_BOLD.0 as i32 } else { FW_SEMIBOLD.0 as i32 },
             0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
         );
-        let old_font2 = SelectObject(hdc_mem, font_sub);
-        SetTextColor(hdc_mem, COLORREF(0x00FFFFFF));
+        let old_font_sub = SelectObject(hdc_mem, font_sub);
+        let sub_color = if enabled {
+            COLORREF(0x00FFFFFF)
+        } else {
+            COLORREF(148 | (163 << 8) | (184 << 16))
+        };
+        SetTextColor(hdc_mem, sub_color);
 
         let mut rect_pill = RECT {
             left: pill_x as i32,
@@ -334,10 +364,10 @@ fn render_caps_notify_modern(
         };
         let wide_sub: Vec<u16> = status_str.encode_utf16().collect();
         DrawTextW(hdc_mem, &mut wide_sub.clone(), &mut rect_pill, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
-        SelectObject(hdc_mem, old_font2);
+        SelectObject(hdc_mem, old_font_sub);
         let _ = DeleteObject(font_sub);
 
-        fix_gdi_text_alpha(pixels, w, h);
+        fix_gdi_text_alpha(pixels, w, h, bg_radius);
 
         commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
     }
@@ -441,7 +471,7 @@ fn render_cyber_minimal(
         SelectObject(hdc_mem, old_f2);
         let _ = DeleteObject(font_tag);
 
-        fix_gdi_text_alpha(pixels, w, h);
+        fix_gdi_text_alpha(pixels, w, h, rad);
         commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
     }
 }
@@ -526,7 +556,7 @@ fn render_neumorphic_key(
             draw_line(pixels, w, h, km + 12.0, (h_px as f32) - km - 14.0, (w_px as f32) - km - 12.0, km + 14.0, 3.8, 226, 75, 75);
         }
 
-        fix_gdi_text_alpha(pixels, w, h);
+        fix_gdi_text_alpha(pixels, w, h, rad);
         commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
     }
 }
@@ -617,7 +647,7 @@ fn render_dynamic_island(
         SelectObject(hdc_mem, old_f2);
         let _ = DeleteObject(font_pill);
 
-        fix_gdi_text_alpha(pixels, w, h);
+        fix_gdi_text_alpha(pixels, w, h, rad);
         commit_layered_window(hwnd, x, y, w_px, h_px, hdc_mem, old_bmp, hbmp, hdc_screen);
     }
 }
@@ -636,35 +666,27 @@ fn draw_base_rounded_background(
     g_val: u8,
     b_val: u8,
 ) {
-    let w_f = w as f32;
-    let h_f = h as f32;
+    let cx = (w as f32) / 2.0;
+    let cy = (h as f32) / 2.0;
+    let hw = cx;
+    let hh = cy;
+    let safe_r = radius.min(hw).min(hh);
 
     for py in 0..h {
         for px in 0..w {
-            let fx = px as f32;
-            let fy = py as f32;
+            let fx = px as f32 + 0.5;
+            let fy = py as f32 + 0.5;
 
-            let dx = if fx < radius {
-                radius - fx
-            } else if fx > w_f - 1.0 - radius {
-                fx - (w_f - 1.0 - radius)
-            } else {
-                0.0
-            };
+            let qx = (fx - cx).abs() - (hw - safe_r);
+            let qy = (fy - cy).abs() - (hh - safe_r);
+            let ext_x = qx.max(0.0);
+            let ext_y = qy.max(0.0);
+            let dist = (ext_x * ext_x + ext_y * ext_y).sqrt() + qx.max(qy).min(0.0) - safe_r;
 
-            let dy = if fy < radius {
-                radius - fy
-            } else if fy > h_f - 1.0 - radius {
-                fy - (h_f - 1.0 - radius)
-            } else {
-                0.0
-            };
-
-            let dist = (dx * dx + dy * dy).sqrt();
-            let factor = if dist <= radius - 1.0 {
+            let factor = if dist <= -0.5 {
                 1.0
-            } else if dist < radius + 0.5 {
-                (radius + 0.5 - dist).clamp(0.0, 1.0)
+            } else if dist < 0.5 {
+                (0.5 - dist).clamp(0.0, 1.0)
             } else {
                 0.0
             };
@@ -700,50 +722,35 @@ fn draw_round_rect_stroke(
     b: u8,
 ) {
     let half_s = stroke_w / 2.0;
-    let min_x = (left - stroke_w).max(0.0) as usize;
-    let max_x = (right + stroke_w).min(w as f32 - 1.0) as usize;
-    let min_y = (top - stroke_w).max(0.0) as usize;
-    let max_y = (bottom + stroke_w).min(h as f32 - 1.0) as usize;
+    let min_x = (left - stroke_w - 1.0).max(0.0) as usize;
+    let max_x = (right + stroke_w + 1.0).min(w as f32 - 1.0) as usize;
+    let min_y = (top - stroke_w - 1.0).max(0.0) as usize;
+    let max_y = (bottom + stroke_w + 1.0).min(h as f32 - 1.0) as usize;
+
+    let cx = (left + right) / 2.0;
+    let cy = (top + bottom) / 2.0;
+    let hw = (right - left) / 2.0;
+    let hh = (bottom - top) / 2.0;
+    let safe_r = radius.min(hw).min(hh);
 
     for py in min_y..=max_y {
         for px in min_x..=max_x {
-            let fx = px as f32;
-            let fy = py as f32;
+            let fx = px as f32 + 0.5;
+            let fy = py as f32 + 0.5;
 
-            let dx = if fx < left + radius {
-                left + radius - fx
-            } else if fx > right - radius {
-                fx - (right - radius)
-            } else {
-                0.0
-            };
-
-            let dy = if fy < top + radius {
-                top + radius - fy
-            } else if fy > bottom - radius {
-                fy - (bottom - radius)
-            } else {
-                0.0
-            };
-
-            let dist = if dx > 0.0 && dy > 0.0 {
-                (dx * dx + dy * dy).sqrt() - radius
-            } else if dx > 0.0 {
-                dx - radius
-            } else if dy > 0.0 {
-                dy - radius
-            } else {
-                -((left + radius - fx).abs().min((right - radius - fx).abs()).min((top + radius - fy).abs()).min((bottom - radius - fy).abs()))
-            };
+            let qx = (fx - cx).abs() - (hw - safe_r);
+            let qy = (fy - cy).abs() - (hh - safe_r);
+            let ext_x = qx.max(0.0);
+            let ext_y = qy.max(0.0);
+            let dist = (ext_x * ext_x + ext_y * ext_y).sqrt() + qx.max(qy).min(0.0) - safe_r;
 
             let edge_dist = dist.abs();
             if edge_dist <= half_s + 0.8 {
-                let alpha_val = if edge_dist <= half_s - 0.4 {
+                let alpha_val = if edge_dist <= half_s - 0.3 {
                     1.0
                 } else {
-                    ((half_s + 0.8 - edge_dist) / 1.2).clamp(0.0, 1.0)
+                    ((half_s + 0.8 - edge_dist) / 1.1).clamp(0.0, 1.0)
                 };
-
                 blend_pixel(pixels, w, h, px, py, r, g, b, alpha_val);
             }
         }
@@ -769,37 +776,31 @@ fn draw_solid_round_rect(
     let min_y = top.max(0.0) as usize;
     let max_y = bottom.min(h as f32 - 1.0) as usize;
 
+    let cx = (left + right) / 2.0;
+    let cy = (top + bottom) / 2.0;
+    let hw = (right - left) / 2.0;
+    let hh = (bottom - top) / 2.0;
+    let safe_r = radius.min(hw).min(hh);
     let base_a = alpha as f32 / 255.0;
 
     for py in min_y..=max_y {
         for px in min_x..=max_x {
-            let fx = px as f32;
-            let fy = py as f32;
+            let fx = px as f32 + 0.5;
+            let fy = py as f32 + 0.5;
 
-            let dx = if fx < left + radius {
-                left + radius - fx
-            } else if fx > right - radius {
-                fx - (right - radius)
-            } else {
-                0.0
-            };
+            let qx = (fx - cx).abs() - (hw - safe_r);
+            let qy = (fy - cy).abs() - (hh - safe_r);
+            let ext_x = qx.max(0.0);
+            let ext_y = qy.max(0.0);
+            let dist = (ext_x * ext_x + ext_y * ext_y).sqrt() + qx.max(qy).min(0.0) - safe_r;
 
-            let dy = if fy < top + radius {
-                top + radius - fy
-            } else if fy > bottom - radius {
-                fy - (bottom - radius)
-            } else {
-                0.0
-            };
-
-            let dist = if dx > 0.0 && dy > 0.0 {
-                (dx * dx + dy * dy).sqrt()
-            } else {
-                0.0
-            };
-
-            if dist <= radius {
-                blend_pixel(pixels, w, h, px, py, r, g, b, base_a);
+            if dist <= 0.5 {
+                let factor = if dist <= -0.5 {
+                    1.0
+                } else {
+                    (0.5 - dist).clamp(0.0, 1.0)
+                };
+                blend_pixel(pixels, w, h, px, py, r, g, b, base_a * factor);
             }
         }
     }
@@ -908,21 +909,30 @@ fn blend_pixel(pixels: &mut [u8], w: usize, _h: usize, x: usize, y: usize, r: u8
     }
 }
 
-fn fix_gdi_text_alpha(pixels: &mut [u8], w: usize, h: usize) {
-    for ty in 0..h {
-        for tx in 0..w {
-            let idx = (ty * w + tx) * 4;
-            let b = pixels[idx];
-            let g = pixels[idx + 1];
-            let r = pixels[idx + 2];
+fn fix_gdi_text_alpha(pixels: &mut [u8], w: usize, h: usize, bg_radius: f32) {
+    let cx = (w as f32) / 2.0;
+    let cy = (h as f32) / 2.0;
+    let hw = cx;
+    let hh = cy;
+    let safe_r = bg_radius.min(hw).min(hh);
 
-            if r > 40 || g > 40 || b > 40 {
-                let brightness = (r.max(g).max(b) as f32) / 255.0;
-                let target_a = (255.0 * brightness) as u8;
-                pixels[idx] = ((b as f32 * brightness) as u8).min(255);
-                pixels[idx + 1] = ((g as f32 * brightness) as u8).min(255);
-                pixels[idx + 2] = ((r as f32 * brightness) as u8).min(255);
-                pixels[idx + 3] = target_a.max(pixels[idx + 3]);
+    for py in 0..h {
+        for px in 0..w {
+            let fx = px as f32 + 0.5;
+            let fy = py as f32 + 0.5;
+
+            let qx = (fx - cx).abs() - (hw - safe_r);
+            let qy = (fy - cy).abs() - (hh - safe_r);
+            let ext_x = qx.max(0.0);
+            let ext_y = qy.max(0.0);
+            let dist = (ext_x * ext_x + ext_y * ext_y).sqrt() + qx.max(qy).min(0.0) - safe_r;
+
+            let idx = (py * w + px) * 4;
+            if dist <= -0.5 {
+                pixels[idx + 3] = 252;
+            } else if dist < 0.5 {
+                let factor = (0.5 - dist).clamp(0.0, 1.0);
+                pixels[idx + 3] = ((252.0 * factor) as u8).max(pixels[idx + 3]);
             }
         }
     }

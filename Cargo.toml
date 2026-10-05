@@ -1,6 +1,6 @@
 [package]
 name = "caps-notify"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 authors = ["GallitoMZ"]
 description = "Lightweight tray indicator for Caps/Num/Scroll Lock on Windows"

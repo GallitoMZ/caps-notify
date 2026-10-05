@@ -228,7 +228,7 @@ impl Tray {
             };
 
             if let Ok(menu) = CreatePopupMenu() {
-                let _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_TRAY_TITLE, w!("Caps Notify v0.1.3"));
+                let _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, ID_TRAY_TITLE, w!("Caps Notify v0.1.4"));
                 let _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
 
                 let _ = AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, PCWSTR(to_w(i18n.tray_settings()).as_ptr()));
