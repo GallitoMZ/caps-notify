@@ -3,6 +3,7 @@
 mod autostart;
 mod config;
 mod hook;
+mod i18n;
 mod notifier;
 mod overlay;
 mod settings_gui;
@@ -11,14 +12,15 @@ mod state;
 mod tray;
 
 use config::Config;
+use i18n::I18n;
 use notifier::LockKey;
 use state::STATE;
 use tray::{
     Tray, ID_POS_BOTTOM_CENTER, ID_POS_BOTTOM_LEFT, ID_POS_BOTTOM_RIGHT, ID_POS_CENTER,
     ID_POS_CENTER_LEFT, ID_POS_CENTER_RIGHT, ID_POS_TOP_CENTER, ID_POS_TOP_LEFT,
-    ID_POS_TOP_RIGHT, ID_SND_CLICK, ID_SND_MODERN, ID_SND_WIN, ID_TRAY_ABOUT, ID_TRAY_AUTOSTART,
-    ID_TRAY_CONFIG, ID_TRAY_EXIT, ID_TRAY_OVERLAY, ID_TRAY_SETTINGS, ID_TRAY_SOUND, ID_TRAY_TOASTS,
-    WM_APP_TRAY,
+    ID_POS_TOP_RIGHT, ID_SND_CLICK, ID_SND_MODERN, ID_SND_WIN, ID_THM_LENOVO, ID_THM_MODERN,
+    ID_TRAY_ABOUT, ID_TRAY_AUTOSTART, ID_TRAY_CONFIG, ID_TRAY_EXIT, ID_TRAY_OVERLAY,
+    ID_TRAY_SETTINGS, ID_TRAY_SOUND, ID_TRAY_TOASTS, WM_APP_TRAY,
 };
 
 use std::cell::RefCell;
@@ -84,7 +86,13 @@ fn main() -> windows::core::Result<()> {
     }
 
     // 2. Load configuration
-    let cfg = Config::load();
+    let mut cfg = Config::load();
+    let is_first_run = cfg.first_run;
+
+    // Check command line arguments for --minimized / --autostart
+    let args: Vec<String> = std::env::args().collect();
+    let is_minimized = args.iter().any(|a| a == "--minimized" || a == "--autostart");
+
     {
         let mut guard = APP_CONFIG.lock().unwrap();
         *guard = Some(cfg.clone());
@@ -134,14 +142,16 @@ fn main() -> windows::core::Result<()> {
         HOOK_HANDLE.with(|h| *h.borrow_mut() = Some(hhook));
     }
 
-    // 8. Immediate visual confirmation on startup:
-    // Show HUD briefly so user immediately knows Caps Notify is active!
+    // 8. Visual confirmation on startup:
+    // Display HUD briefly so the user instantly sees that Caps Notify is running
     if cfg.overlay_enabled {
         overlay::show("Caps Lock", STATE.is_caps_on(), &cfg);
     }
 
-    // Open Settings Window on startup if configured (default: true)
-    if cfg.show_settings_on_start {
+    // Open settings ONLY on the first run ever (not on subsequent boots/launches)
+    if is_first_run && !is_minimized {
+        cfg.first_run = false;
+        let _ = cfg.save();
         settings_gui::open_settings(cfg.clone(), |new_cfg| {
             set_config(new_cfg);
         });
@@ -191,7 +201,6 @@ unsafe extern "system" fn wndproc(
             if vk == VK_CAPITAL.0 {
                 let prev = STATE.caps.load(Ordering::SeqCst);
                 let sys = (GetKeyState(VK_CAPITAL.0 as i32) & 0x0001) != 0;
-                // Always flip dynamically: if GetKeyState already changed use sys, else invert prev
                 let new_state = if sys != prev { sys } else { !prev };
                 STATE.caps.store(new_state, Ordering::SeqCst);
 
@@ -280,6 +289,10 @@ unsafe extern "system" fn wndproc(
                         set_config(new_cfg);
                     });
                 }
+                // Themes
+                ID_THM_MODERN => set_theme_and_preview("CapsNotifyModern"),
+                ID_THM_LENOVO => set_theme_and_preview("LenovoClassic"),
+
                 // Positions
                 ID_POS_TOP_CENTER => set_position_and_preview("TopCenter"),
                 ID_POS_TOP_LEFT => set_position_and_preview("TopLeft"),
@@ -326,9 +339,11 @@ unsafe extern "system" fn wndproc(
                     open_config_file();
                 }
                 ID_TRAY_ABOUT => {
-                    let text = w!("Caps Notify v0.1.0\n\nIndicador nativo y ultra-ligero para teclas de bloqueo en Windows.\nInspirado en el OSD de Lenovo con personalizaci\u{00f3}n completa.\n\nAutor: GallitoMZ\nLicencia: MIT");
-                    let title = w!("Acerca de Caps Notify");
-                    MessageBoxW(hwnd, text, title, MB_ICONINFORMATION | MB_OK);
+                    let cfg = get_config();
+                    let i18n = I18n::new(&cfg.language);
+                    let text: Vec<u16> = i18n.about_body().encode_utf16().chain(std::iter::once(0)).collect();
+                    let title: Vec<u16> = i18n.tray_about().encode_utf16().chain(std::iter::once(0)).collect();
+                    MessageBoxW(hwnd, PCWSTR(text.as_ptr()), PCWSTR(title.as_ptr()), MB_ICONINFORMATION | MB_OK);
                 }
                 ID_TRAY_EXIT => {
                     let _ = DestroyWindow(hwnd);
@@ -359,6 +374,12 @@ unsafe extern "system" fn wndproc(
 
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
     }
+}
+
+fn set_theme_and_preview(theme: &str) {
+    update_config(|c| c.overlay_theme = theme.to_string());
+    let cfg = get_config();
+    overlay::show("Caps Lock", STATE.is_caps_on(), &cfg);
 }
 
 fn set_position_and_preview(pos: &str) {

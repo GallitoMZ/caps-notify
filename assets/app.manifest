@@ -3,7 +3,7 @@
   <assemblyIdentity
       type="win32"
       name="CapsNotify"
-      version="0.1.0.0"
+      version="0.1.1.0"
       processorArchitecture="*"/>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
@@ -17,6 +17,18 @@
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>
     </windowsSettings>
   </application>
+  <dependency>
+    <dependentAssembly>
+      <assemblyIdentity
+          type="win32"
+          name="Microsoft.Windows.Common-Controls"
+          version="6.0.0.0"
+          processorArchitecture="*"
+          publicKeyToken="6595b64144ccf1df"
+          language="*"
+        />
+    </dependentAssembly>
+  </dependency>
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <!-- Windows 10 and 11 -->

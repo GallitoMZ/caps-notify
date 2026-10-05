@@ -4,37 +4,39 @@ use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    pub language: String,              // "en" (default) or "es"
     pub watch_caps: bool,
     pub watch_num: bool,
     pub watch_scroll: bool,
     pub toast_enabled: bool,
     pub sound_enabled: bool,
-    pub sound_theme: String,
-    pub overlay_enabled: bool,
-    pub overlay_position: String,
-    pub overlay_theme: String,
-    pub overlay_size: String,
-    pub overlay_duration_ms: u32,
+    pub sound_theme: String,           // "ModernChime", "KeyClick", "WindowsDefault"
+    pub overlay_enabled: bool,         // default true
+    pub overlay_position: String,      // "TopCenter", "TopRight", "TopLeft", etc.
+    pub overlay_theme: String,         // "CapsNotifyModern" (default), "LenovoClassic"
+    pub overlay_size: String,          // "Small", "Medium", "Large"
+    pub overlay_duration_ms: u32,      // default 850
     pub autostart: bool,
-    pub show_settings_on_start: bool,
+    pub first_run: bool,               // true only on first run, then set to false
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
+            language: "en".to_string(), // English default as requested
             watch_caps: true,
             watch_num: true,
             watch_scroll: false,
             toast_enabled: false,
             sound_enabled: false,
             sound_theme: "ModernChime".to_string(),
-            overlay_enabled: true, // Enabled by default as requested
+            overlay_enabled: true,
             overlay_position: "TopCenter".to_string(),
-            overlay_theme: "LenovoKeycap".to_string(),
+            overlay_theme: "CapsNotifyModern".to_string(), // New unique design by default!
             overlay_size: "Medium".to_string(),
             overlay_duration_ms: 850,
             autostart: false,
-            show_settings_on_start: true,
+            first_run: true,
         }
     }
 }

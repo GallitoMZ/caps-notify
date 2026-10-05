@@ -4,101 +4,102 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%20%7C%2011-0078D6?style=flat-square)](https://microsoft.com/windows)
 
-**Caps Notify** es una aplicación Windows nativa, ultraligera (< 500 KB), de código abierto y residente en la bandeja del sistema (*System Tray*). Notifica el estado en tiempo real de **Caps Lock** (Bloq Mayús), **Num Lock** (Bloq Num) y **Scroll Lock** (Bloq Despl) con un diseño inspirado en el clásico OSD de Lenovo, sonido armónico moderno y cero polling de CPU.
+**Caps Notify** is a lightweight (< 500 KB), open-source Windows native system tray utility. It provides instant on-screen HUD and audio feedback for **Caps Lock**, **Num Lock**, and **Scroll Lock** keys with event-driven zero polling CPU usage and under 2 MB idle RAM.
 
 ---
 
-## 🌟 Características clave
+## 🌟 Key Features
 
-- **HUD Flotante OSD estilo Lenovo**:
-  - Activado por defecto.
-  - Diseño fiel y elegante inspirado en los indicadores OSD de teclas físicas (*Keycap* con esquina redondeada, hendidura esférica 3D y símbolos limpios).
-  - **Caps Lock**: Muestra `ABC` en mayúsculas al activarse y `abc` en minúsculas al desactivarse con la flecha `^`.
-  - **Num Lock**: Muestra el LED circular y `123`, con tachado diagonal `\` al desactivarse.
-  - **Scroll Lock**: Muestra el indicador `SCR` / `scr` con tachado.
-  - **100% dinámico y reactivo**: Si pulsas la tecla rápidamente en ráfaga, el indicador actualiza su estado de forma instantánea sin retrasos ni fotogramas desfasados.
-  - Renderizado directo en **Desktop Window Manager (DWM)** con alpha real por píxel (`UpdateLayeredWindow`).
-- **9 Posiciones en pantalla**:
-  - Arriba Centro, Arriba Izquierda, Arriba Derecha.
-  - Centro Izquierda, Centro Total, Centro Derecha.
-  - Abajo Izquierda, Abajo Centro, Abajo Derecha.
-- **Audio Chime Moderno y Sintetizado**:
-  - Cero dependencias ni archivos externos.
-  - Generador de audio procedural PCM en memoria:
-    - **Chime Moderno**: Un ding armónico cristalino y suave (880 Hz para ON, 587 Hz para OFF), al estilo de interfaces modernas como macOS e iOS.
-    - **Clic Mecánico**: Sonido táctil y sutil de switch mecánico (25 ms).
-    - **Sonido Windows**: Sonido predeterminado del sistema.
-- **Ventana Nativa de Configuración**:
-  - Se abre al iniciar la aplicación (configurable) o con doble clic en el icono de la bandeja.
-  - Muestra el estado en tiempo real de las teclas de bloqueo.
-  - Selector de temas, posiciones, tamaños, duración y botones de prueba en vivo (**👁️ Probar HUD** y **🔊 Probar sonido**).
-- **Event-Driven puro (0% CPU en reposo)**:
-  - Gancho de teclado de bajo nivel (`WH_KEYBOARD_LL`) con cola asíncrona. Cero bucles en segundo plano.
-- **Autoarranque opcional con Windows**:
-  - Integrado en `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+- **Modern Glass HUD & Lenovo Classic OSD**:
+  - **Caps Notify Modern** *(Default)*: A sleek, unique obsidian glass HUD with neon glowing jewel accents and dynamic `● ON` / `○ OFF` status capsules.
+  - **Lenovo Classic**: Pixel-perfect reproduction of the classic Lenovo OSD (Keycap frame with internal dish arc, pure white `#FFFFFF`, `ABC` / `abc`, and diagonal slash).
+  - True per-pixel anti-aliasing rendered directly onto Desktop Window Manager (DWM) via `UpdateLayeredWindow`.
+  - Zero lag, 100% reactive: rapidly tapping the lock key updates the state in real-time.
+- **9 Screen Positions**:
+  - Top Center *(Default)*, Top Right, Top Left, Center, Bottom Center, Bottom Right, Bottom Left, Center Right, Center Left.
+- **Synthesized Audio Chimes**:
+  - Pure in-memory 16-bit PCM procedural audio (zero external audio files or third-party runtimes).
+  - **Modern Chime (Harmonic)**: Gentle crystal harmonic chime (880 Hz ON / 587 Hz OFF).
+  - **Mechanical Click**: Subtle tactile key switch click (25 ms).
+  - **Windows Default**: Standard system notification sound.
+- **Native Settings Window**:
+  - Styled with Windows 11 / 10 Common Controls v6 (modern visual styles).
+  - Application icon embedded in title bar and taskbar.
+  - Spacious 3-card real-time status monitor (`Caps Lock`, `Num Lock`, `Scroll Lock`).
+  - Bilingual interface (English default, with Español option).
+  - Opens on the **first run only**; subsequent boots start silently into the system tray without interruption.
+  - Live **Test HUD** and **Test Sound** preview buttons.
+- **Ultra-Efficient Architecture**:
+  - Direct Win32 API (`windows` crate 0.58).
+  - Low-level keyboard hook (`WH_KEYBOARD_LL`) with asynchronous message dispatch.
+  - 0.0% idle CPU and ~1.5 MB private memory.
+  - Auto-recovery on `explorer.exe` restart (`TaskbarCreated`).
 
 ---
 
-## 📊 Comparativa de rendimiento
+## 📊 Performance Benchmark
 
-| Métrica | Caps Notify (Rust) | TrayStatus Free | Lenovo Hotkeys |
+| Metric | Caps Notify (Rust) | TrayStatus Free | Lenovo Hotkeys |
 |---|---|---|---|
-| **Tamaño del binario** | **~458 KB (0.45 MB)** | ~18 MB | ~65 MB |
-| **RAM en reposo** | **< 4.5 MB** | 45 MB | 70 MB |
-| **CPU en reposo** | **0.0%** (Event-driven) | ~0.1% - 0.5% | ~0.2% - 1.0% |
-| **Framework requerido** | **Ninguno** (Win32 nativo) | .NET 8 / WPF | UWP / Electron |
-| **Tiempo de arranque** | **< 15 ms** | ~850 ms | ~1500 ms |
+| **Binary Size** | **~478 KB (0.47 MB)** | ~18 MB | ~65 MB |
+| **Idle RAM (Private)** | **~1.55 MB** | 45 MB | 70 MB |
+| **Idle CPU** | **0.0%** (Event-driven) | ~0.1% - 0.5% | ~0.2% - 1.0% |
+| **Runtime Dependencies** | **None** (Native Win32) | .NET 8 / WPF | UWP / Electron |
+| **Startup Time** | **< 15 ms** | ~850 ms | ~1500 ms |
 
 ---
 
-## 🚀 Compilación y ejecución
+## 🚀 Build and Run
 
-### Compilación Release optimizada
+### Build Optimized Release
 ```powershell
 cargo build --release
 ```
-El ejecutable final se genera en:
+The standalone single executable will be located at:
 ```
 target\release\caps-notify.exe
 ```
 
 ---
 
-## ⚙️ Configuración (`config.toml`)
+## ⚙️ Configuration (`config.toml`)
 
-Ubicado en `%APPDATA%\caps-notify\config.toml`:
+Stored at `%APPDATA%\caps-notify\config.toml`:
 
 ```toml
-# Teclas de bloqueo a monitorizar
+# Language: "en" (default) or "es"
+language = "en"
+
+# Lock keys to monitor
 watch_caps = true
 watch_num = true
 watch_scroll = false
 
-# HUD Flotante (OSD)
+# HUD Overlay options
 overlay_enabled = true
-# Opciones: "TopCenter", "TopLeft", "TopRight", "CenterLeft", "Center", "CenterRight", "BottomLeft", "BottomCenter", "BottomRight"
+# Themes: "CapsNotifyModern" (Default), "LenovoClassic"
+overlay_theme = "CapsNotifyModern"
+# Positions: "TopCenter", "TopLeft", "TopRight", "CenterLeft", "Center", "CenterRight", "BottomLeft", "BottomCenter", "BottomRight"
 overlay_position = "TopCenter"
-# Opciones: "LenovoKeycap", "AccentColor"
-overlay_theme = "LenovoKeycap"
-# Opciones: "Small" (104px), "Medium" (128px), "Large" (156px)
+# Sizes: "Small" (108px), "Medium" (130px), "Large" (156px)
 overlay_size = "Medium"
 overlay_duration_ms = 850
 
-# Sonido
+# Audio options
 sound_enabled = false
-# Opciones: "ModernChime", "KeyClick", "WindowsDefault"
+# Themes: "ModernChime", "KeyClick", "WindowsDefault"
 sound_theme = "ModernChime"
 
-# Notificaciones Toast de Windows
+# Windows Toast Notifications
 toast_enabled = false
 
-# Sistema
+# System options
 autostart = false
-show_settings_on_start = true
+first_run = false
 ```
 
 ---
 
-## 📄 Licencia
+## 📄 License
 
-Distribuido bajo la Licencia **MIT**. Consulta [`LICENSE`](LICENSE) para más detalles.
+Distributed under the **MIT** License. See [`LICENSE`](LICENSE) for details.

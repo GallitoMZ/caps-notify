@@ -1,5 +1,8 @@
 # Caps Notify Configuration
 
+# Language: "en" (default) or "es"
+language = "en"
+
 # Lock keys to monitor
 watch_caps = true
 watch_num = true
@@ -7,11 +10,11 @@ watch_scroll = false
 
 # HUD Overlay options
 overlay_enabled = true
+# Themes: "CapsNotifyModern" (Unique modern glass - Default), "LenovoClassic" (Exact Lenovo OSD)
+overlay_theme = "CapsNotifyModern"
 # Positions: "TopCenter", "TopLeft", "TopRight", "CenterLeft", "Center", "CenterRight", "BottomLeft", "BottomCenter", "BottomRight"
 overlay_position = "TopCenter"
-# Themes: "LenovoKeycap", "AccentColor", "ModernBadge"
-overlay_theme = "LenovoKeycap"
-# Sizes: "Small" (104px), "Medium" (128px), "Large" (156px)
+# Sizes: "Small" (108px), "Medium" (130px), "Large" (156px)
 overlay_size = "Medium"
 overlay_duration_ms = 850
 
@@ -25,4 +28,4 @@ toast_enabled = false
 
 # System options
 autostart = false
-show_settings_on_start = true
+first_run = true

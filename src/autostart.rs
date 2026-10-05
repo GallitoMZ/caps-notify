@@ -21,10 +21,10 @@ pub fn is_enabled() -> bool {
     }
 }
 
-/// Adds current executable path to HKCU Run key
+/// Adds current executable path with --minimized flag to HKCU Run key
 pub fn enable() -> Result<(), Box<dyn std::error::Error>> {
     let current_exe = std::env::current_exe()?;
-    let val_str = format!("\"{}\"", current_exe.to_string_lossy());
+    let val_str = format!("\"{}\" --minimized", current_exe.to_string_lossy());
     let wide_val: Vec<u16> = val_str.encode_utf16().chain(std::iter::once(0)).collect();
 
     unsafe {
